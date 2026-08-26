@@ -8,6 +8,13 @@ class CustomTextField extends StatelessWidget {
   final VoidCallback? onToggleVisibility;
   final TextEditingController? controller;
   final TextInputType? keyboardType;
+  final int maxLines;
+  final Widget? prefixIcon;
+  final Widget? suffix;
+  final String? Function(String?)? validator;
+  final void Function(String)? onChanged;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   const CustomTextField({
     super.key,
@@ -18,6 +25,13 @@ class CustomTextField extends StatelessWidget {
     this.onToggleVisibility,
     this.controller,
     this.keyboardType,
+    this.maxLines = 1,
+    this.prefixIcon,
+    this.suffix,
+    this.validator,
+    this.onChanged,
+    this.readOnly = false,
+    this.onTap,
   });
 
   @override
@@ -33,38 +47,31 @@ class CustomTextField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        TextField(
+        TextFormField(
           controller: controller,
           obscureText: obscureText,
           keyboardType: keyboardType,
+          maxLines: isPassword ? 1 : maxLines,
+          validator: validator,
+          onChanged: onChanged,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: hint,
-            filled: true,
-            fillColor: theme.colorScheme.surface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: theme.colorScheme.primary),
-            ),
+            prefixIcon: prefixIcon,
             suffixIcon: isPassword
                 ? IconButton(
                     icon: Icon(
-                      obscureText ? Icons.visibility_off : Icons.visibility,
+                      obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                     onPressed: onToggleVisibility,
                   )
-                : null,
+                : suffix,
           ),
         ),
       ],
     );
   }
 }
+

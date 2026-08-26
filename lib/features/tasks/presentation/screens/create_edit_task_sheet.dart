@@ -46,14 +46,14 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
   String? _selectedMilestoneId;
 
   final List<String> _categories = [
-    'AI & Data Science',
-    'Research',
-    'Project',
+    'Work',
     'Study',
     'Personal',
     'Health',
-    'Work',
-    'Learning',
+    'Productivity',
+    'Life & Home',
+    'Rest',
+    'Spiritual',
     'Other'
   ];
 

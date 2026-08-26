@@ -49,11 +49,11 @@ class ProjectRepository {
     _projects.add(
       ProjectModel(
         id: _uuid.v4(),
-        title: 'Customer Churn Prediction',
-        description: 'Predict customer churn using Random Forest.',
+        title: 'Personal Portfolio & Brand',
+        description: 'Design and launch responsive personal website and showcase work.',
         status: ProjectStatus.active,
         priority: ProjectPriority.high,
-        category: 'Data Science',
+        category: 'Work',
         targetDate: now.add(const Duration(days: 30)),
         createdAt: now.subtract(const Duration(days: 5)),
       ),

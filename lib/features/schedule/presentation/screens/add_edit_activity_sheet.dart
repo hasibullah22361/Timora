@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:timora/features/schedule/data/models/schedule_activity.dart';
+import 'package:timora/features/schedule/presentation/widgets/activity_picker_sheet.dart';
 import '../providers/schedule_provider.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/primary_button.dart';
@@ -26,18 +27,19 @@ class _AddEditActivitySheetState extends ConsumerState<AddEditActivitySheet> {
   late Color _selectedColor;
 
   final List<String> _categories = [
-    'AI & Data Science', 'Research', 'Project', 'Personal', 'Health', 'Study', 'Food', 'Sleep', 'Other'
+    'Work', 'Study', 'Health', 'Food', 'Personal', 'Productivity', 'Life & Home', 'Sleep', 'Spiritual', 'Other'
   ];
   
   final Map<String, String> _categoryIcons = {
-    'AI & Data Science': '🤖',
-    'Research': '🔍',
-    'Project': '💻',
-    'Personal': '☕',
-    'Health': '🏃',
+    'Work': '💼',
     'Study': '📚',
-    'Food': '🍛',
+    'Health': '🏃',
+    'Food': '🍽️',
+    'Personal': '✨',
+    'Productivity': '⚡',
+    'Life & Home': '🏡',
     'Sleep': '💤',
+    'Spiritual': '🌱',
     'Other': '📌',
   };
 
@@ -57,9 +59,9 @@ class _AddEditActivitySheetState extends ConsumerState<AddEditActivitySheet> {
     } else {
       _startTime = TimeOfDay.now();
       _endTime = TimeOfDay(hour: (_startTime.hour + 1) % 24, minute: _startTime.minute);
-      _selectedCategory = 'Other';
-      _selectedIcon = '📌';
-      _selectedColor = Colors.blue;
+      _selectedCategory = 'Work';
+      _selectedIcon = '💼';
+      _selectedColor = const Color(0xFF2563EB);
     }
   }
 
@@ -68,6 +70,26 @@ class _AddEditActivitySheetState extends ConsumerState<AddEditActivitySheet> {
     _titleController.dispose();
     _descController.dispose();
     super.dispose();
+  }
+
+  Future<void> _chooseFromLibrary() async {
+    final chosen = await ActivityPickerSheet.show(context);
+    if (chosen != null) {
+      setState(() {
+        _titleController.text = chosen.name;
+        if (chosen.description.isNotEmpty) {
+          _descController.text = chosen.description;
+        }
+        _selectedCategory = chosen.category;
+        _selectedIcon = chosen.icon;
+        _selectedColor = chosen.color;
+
+        // Auto compute end time from default duration
+        final startMinutes = _startTime.hour * 60 + _startTime.minute;
+        final endMinutes = (startMinutes + chosen.defaultDurationMinutes) % (24 * 60);
+        _endTime = TimeOfDay(hour: endMinutes ~/ 60, minute: endMinutes % 60);
+      });
+    }
   }
 
   void _save() async {
@@ -139,17 +161,61 @@ class _AddEditActivitySheetState extends ConsumerState<AddEditActivitySheet> {
             const SizedBox(height: 12),
             Container(width: 40, height: 4, decoration: BoxDecoration(color: theme.colorScheme.onSurface.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
-            Text(isEditing ? 'Edit Activity' : 'Add Activity', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const Divider(height: 32),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(isEditing ? 'Edit Activity' : 'Add Activity', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  OutlinedButton.icon(
+                    onPressed: _chooseFromLibrary,
+                    icon: const Icon(Icons.auto_stories_outlined, size: 16),
+                    label: const Text('50+ Library', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 24),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CustomTextField(label: 'Title', hint: 'E.g. Read Chapter 1', controller: _titleController),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 54,
+                          height: 54,
+                          decoration: BoxDecoration(
+                            color: _selectedColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: _selectedColor, width: 2),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(_selectedIcon, style: const TextStyle(fontSize: 28)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: CustomTextField(
+                            label: 'Title',
+                            hint: 'E.g. Morning Workout, Deep Work',
+                            controller: _titleController,
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
-                    CustomTextField(label: 'Description', hint: 'Add some details', controller: _descController),
+                    CustomTextField(
+                      label: 'Description',
+                      hint: 'Add some details',
+                      controller: _descController,
+                    ),
                     const SizedBox(height: 24),
                     Row(
                       children: [
@@ -167,6 +233,7 @@ class _AddEditActivitySheetState extends ConsumerState<AddEditActivitySheet> {
                       children: _categories.map((c) {
                         final isSelected = _selectedCategory == c;
                         return ChoiceChip(
+                          avatar: Text(_categoryIcons[c] ?? '📌', style: const TextStyle(fontSize: 13)),
                           label: Text(c),
                           selected: isSelected,
                           onSelected: (val) {
@@ -228,3 +295,4 @@ class _AddEditActivitySheetState extends ConsumerState<AddEditActivitySheet> {
     );
   }
 }
+

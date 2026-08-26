@@ -69,10 +69,10 @@ class TaskRepository {
     _tasks.add(
       TaskModel(
         id: _uuid.v4(),
-        title: 'Complete ML assignment',
-        description: 'Read the prompt and implement the neural network.',
+        title: 'Review weekly priorities and goals',
+        description: 'Check main objectives, roadmap, and schedule milestones.',
         priority: TaskPriority.high,
-        category: 'AI & Data Science',
+        category: 'Work',
         dueDate: DateTime(now.year, now.month, now.day),
         dueTime: const TimeOfDay(hour: 18, minute: 0),
         createdAt: now.subtract(const Duration(days: 1)),
@@ -81,9 +81,10 @@ class TaskRepository {
     _tasks.add(
       TaskModel(
         id: _uuid.v4(),
-        title: 'Read research paper',
-        priority: TaskPriority.medium,
-        category: 'Research',
+        title: 'Complete key project deliverable',
+        description: 'Focus on primary deliverables and finalize draft.',
+        priority: TaskPriority.high,
+        category: 'Work',
         dueDate: DateTime(now.year, now.month, now.day),
         createdAt: now.subtract(const Duration(hours: 5)),
       ),
@@ -91,7 +92,7 @@ class TaskRepository {
     _tasks.add(
       TaskModel(
         id: _uuid.v4(),
-        title: 'Review lecture notes',
+        title: 'Read 20 pages of selected book',
         status: TaskStatus.completed,
         priority: TaskPriority.low,
         category: 'Study',
@@ -103,10 +104,10 @@ class TaskRepository {
     _tasks.add(
       TaskModel(
         id: _uuid.v4(),
-        title: 'Complete research methodology',
+        title: 'Organize workspace & clear inbox',
         status: TaskStatus.pending,
-        priority: TaskPriority.high,
-        category: 'Research',
+        priority: TaskPriority.medium,
+        category: 'Productivity',
         dueDate: now.subtract(const Duration(days: 1)),
         createdAt: now.subtract(const Duration(days: 3)),
       ),

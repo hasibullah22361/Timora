@@ -80,33 +80,83 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     );
   }
 
+  final List<String> _promptSuggestions = [
+    'Plan my day',
+    'Create a routine',
+    'Break a goal into tasks',
+    'Help me prioritize',
+    'Reschedule my day',
+    'Analyze my productivity',
+    'Suggest a better schedule',
+    'Create tomorrow\'s plan',
+    'Create weekly plan',
+    'Suggest breaks',
+    'Ask anything about my routine',
+  ];
+
   Widget _buildEmptyState(ThemeData theme) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.auto_awesome, size: 64, color: theme.colorScheme.primary),
-          const SizedBox(height: 16),
-          const Text('How can I help you be productive?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 32),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              _buildSuggestionChip('Plan tomorrow'),
-              _buildSuggestionChip('Prioritize my tasks'),
-              _buildSuggestionChip('Review today'),
-            ],
-          )
-        ],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFFDB2777)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.auto_awesome, size: 40, color: Colors.white),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'TIMORA AI',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'How can I help you today?',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 28),
+            Wrap(
+              spacing: 8,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: _promptSuggestions.map((label) {
+                return _buildSuggestionChip(label, theme);
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSuggestionChip(String label) {
+  Widget _buildSuggestionChip(String label, ThemeData theme) {
     return ActionChip(
-      label: Text(label),
+      avatar: const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF7C3AED)),
+      label: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+      backgroundColor: theme.colorScheme.surface,
+      side: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.7)),
       onPressed: () => _sendMessage(label),
     );
   }

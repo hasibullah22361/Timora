@@ -8,6 +8,8 @@ import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../../../main_layout/presentation/screens/main_layout_screen.dart';
 
+import '../../../profile/presentation/providers/user_profile_provider.dart';
+
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -21,11 +23,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
 
   void _login() async {
+    final email = _emailController.text.trim();
     final success = await ref.read(authControllerProvider.notifier).login(
-      _emailController.text.trim(),
+      email,
       _passwordController.text,
     );
     if (success && mounted) {
+      final currentProfile = ref.read(userProfileProvider);
+      if (email.isNotEmpty && currentProfile.email != email) {
+        final namePart = email.split('@').first;
+        ref.read(userProfileProvider.notifier).updateProfile(
+          currentProfile.copyWith(
+            email: email,
+            username: namePart,
+          ),
+        );
+      }
       _navigateToHome();
     }
   }

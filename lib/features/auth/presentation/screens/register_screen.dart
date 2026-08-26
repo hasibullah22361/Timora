@@ -6,6 +6,8 @@ import '../../../../core/widgets/timora_branding.dart';
 import '../providers/auth_provider.dart';
 import '../../../main_layout/presentation/screens/main_layout_screen.dart';
 
+import '../../../profile/presentation/providers/user_profile_provider.dart';
+
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
@@ -19,11 +21,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
 
   void _register() async {
+    final email = _emailController.text.trim();
     final success = await ref.read(authControllerProvider.notifier).register(
-      _emailController.text.trim(),
+      email,
       _passwordController.text,
     );
     if (success && mounted) {
+      final currentProfile = ref.read(userProfileProvider);
+      final namePart = email.split('@').first;
+      ref.read(userProfileProvider.notifier).updateProfile(
+        currentProfile.copyWith(
+          email: email,
+          username: namePart,
+          fullName: namePart.isNotEmpty ? (namePart[0].toUpperCase() + namePart.substring(1)) : 'User',
+        ),
+      );
+
       // Navigate to Home on success
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(

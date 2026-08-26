@@ -67,9 +67,9 @@ class GoalRepository {
     _goals.add(
       GoalModel(
         id: goalId,
-        title: 'Become a Data Scientist',
-        description: 'Master ML and Deep Learning',
-        category: 'Career',
+        title: 'Master Professional Skillset',
+        description: 'Complete core curriculum, build real projects, and achieve certification.',
+        category: 'Personal Development',
         status: GoalStatus.active,
         priority: GoalPriority.high,
         targetDate: now.add(const Duration(days: 120)),
@@ -81,7 +81,7 @@ class GoalRepository {
       MilestoneModel(
         id: _uuid.v4(),
         goalId: goalId,
-        title: 'Python Fundamentals',
+        title: 'Foundational Knowledge & Principles',
         status: MilestoneStatus.completed,
         order: 0,
         createdAt: now.subtract(const Duration(days: 10)),
@@ -92,7 +92,7 @@ class GoalRepository {
       MilestoneModel(
         id: _uuid.v4(),
         goalId: goalId,
-        title: 'Statistics',
+        title: 'Core Practice & Applied Projects',
         status: MilestoneStatus.completed,
         order: 1,
         createdAt: now.subtract(const Duration(days: 10)),
@@ -103,7 +103,7 @@ class GoalRepository {
       MilestoneModel(
         id: _uuid.v4(),
         goalId: goalId,
-        title: 'Machine Learning',
+        title: 'Final Mastery & Milestone Delivery',
         status: MilestoneStatus.inProgress,
         order: 2,
         createdAt: now.subtract(const Duration(days: 10)),

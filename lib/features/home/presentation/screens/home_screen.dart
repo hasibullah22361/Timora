@@ -18,6 +18,9 @@ import 'package:timora/features/settings/presentation/providers/settings_provide
 import 'package:timora/features/settings/data/models/settings_models.dart';
 import 'package:timora/features/cloud_sync/presentation/widgets/sync_indicator_widget.dart';
 import 'package:timora/features/ai_assistant/presentation/widgets/dashboard_ai_widget.dart';
+import 'package:timora/features/ai_assistant/presentation/widgets/timora_ai_button.dart';
+import 'package:timora/features/profile/presentation/providers/user_profile_provider.dart';
+import 'package:timora/features/profile/presentation/screens/profile_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -26,6 +29,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final settings = ref.watch(settingsProvider);
+    final profile = ref.watch(userProfileProvider);
     
     // Build widgets map
     final widgetMap = <DashboardWidgetType, Widget>{
@@ -46,6 +50,7 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
+      floatingActionButton: const TimoraAIButton(),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -55,36 +60,61 @@ class HomeScreen extends ConsumerWidget {
               // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        greeting,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            'User Name', // Placeholder
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurface,
-                            ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          greeting,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                           ),
-                          const SizedBox(width: 8),
-                          const SyncIndicatorWidget(),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                profile.fullName,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const SyncIndicatorWidget(),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const CircleAvatar(
-                    radius: 24,
-                    backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=11'), // Placeholder profile
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: profile.avatarColor.withValues(alpha: 0.16),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: profile.avatarColor, width: 2),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        profile.avatarPreset,
+                        style: const TextStyle(fontSize: 26),
+                      ),
+                    ),
                   ),
                 ],
               ),

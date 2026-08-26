@@ -69,22 +69,22 @@ class RoutineRepository {
     final routineId = _uuid.v4();
     _routines.add(Routine(
       id: routineId,
-      name: 'Core Study & Focus Routine',
-      description: 'Daily structured routine for study, research, and personal time',
-      icon: '📚',
-      color: const Color(0xFF2962FF),
+      name: 'Master Daily Productivity Routine',
+      description: 'Balanced daily structured routine for deep focus, learning, health, and personal growth',
+      icon: '⚡',
+      color: const Color(0xFF2563EB),
       daysOfWeek: [1, 2, 3, 4, 5, 6, 7], // All week
       createdAt: DateTime.now(),
     ));
 
-    void addBlock(String title, String desc, String icon, int startH, int endH, Color color, int order, String category) {
+    void addBlock(String title, String desc, String icon, int startH, int startM, int endH, int endM, Color color, int order, String category) {
       _blocks.add(RoutineBlock(
         id: _uuid.v4(),
         routineId: routineId,
         title: title,
         description: desc,
-        startTime: TimeOfDay(hour: startH, minute: 0),
-        endTime: TimeOfDay(hour: endH, minute: 0),
+        startTime: TimeOfDay(hour: startH, minute: startM),
+        endTime: TimeOfDay(hour: endH, minute: endM),
         category: category,
         icon: icon,
         color: color,
@@ -92,22 +92,26 @@ class RoutineRepository {
       ));
     }
 
-    // 12:00 AM – 8:00 AM: Sleep
-    addBlock('Sleep', 'Sleep and full recovery', '💤', 0, 8, Colors.indigo, 0, 'Sleep');
-    // 8:00 AM – 9:00 AM: Get ready, clothes, breakfast
-    addBlock('Get Ready', 'Get ready, clothes, breakfast', '🍳', 8, 9, Colors.orange, 1, 'Routine');
-    // 9:00 AM – 12:00 PM: AI & Data Science study
-    addBlock('AI & Data Science Study', 'Deep study session', '🤖', 9, 12, Colors.blue, 2, 'AI & Data Science');
-    // 12:00 PM – 1:00 PM: Lunch / rest
-    addBlock('Lunch / Rest', 'Lunch and recharge', '🍛', 12, 13, Colors.green, 3, 'Food');
-    // 1:00 PM – 5:00 PM: AI & Data Science study
-    addBlock('AI & Data Science Study', 'Practical study & coding', '🤖', 13, 17, Colors.blue, 4, 'AI & Data Science');
-    // 5:00 PM – 8:00 PM: Tea, food, prayer, rest / personal time
-    addBlock('Personal Time', 'Tea, food, prayer, rest / personal time', '☕', 17, 20, Colors.teal, 5, 'Personal');
-    // 8:00 PM – 11:00 PM: Research + Project
-    addBlock('Research + Project', 'Research and project implementation', '💻', 20, 23, Colors.purple, 6, 'Project');
-    // 11:00 PM – 12:00 AM: Daily review + plan tomorrow
-    addBlock('Daily Review', 'Daily review + plan tomorrow', '📝', 23, 0, Colors.blueGrey, 7, 'Routine');
+    // 12:00 AM – 7:30 AM: Sleep
+    addBlock('Night Sleep', 'Restful sleep and physical recovery', '💤', 0, 0, 7, 30, const Color(0xFF4338CA), 0, 'Sleep');
+    // 7:30 AM – 8:30 AM: Morning routine & breakfast
+    addBlock('Morning Routine & Breakfast', 'Hydrate, stretch, shower, and energizing breakfast', '🍳', 7, 30, 8, 30, const Color(0xFFF59E0B), 1, 'Personal Care');
+    // 8:30 AM – 12:30 PM: Deep focus block 1
+    addBlock('Deep Work / Focus Block 1', 'High priority goals, intense focus, and output', '🔥', 8, 30, 12, 30, const Color(0xFF2563EB), 2, 'Work');
+    // 12:30 PM – 1:30 PM: Lunch & rest
+    addBlock('Lunch & Recharge', 'Nutritious lunch and relaxation break', '🍲', 12, 30, 13, 30, const Color(0xFF10B981), 3, 'Food');
+    // 1:30 PM – 5:30 PM: Deep focus block 2
+    addBlock('Deep Work / Focus Block 2', 'Project work, collaborative tasks, and execution', '💻', 13, 30, 17, 30, const Color(0xFF2563EB), 4, 'Work');
+    // 5:30 PM – 7:00 PM: Workout & personal time
+    addBlock('Workout & Personal Time', 'Exercise, gym, outdoors, or personal care', '🏃', 17, 30, 19, 0, const Color(0xFF0D9488), 5, 'Health');
+    // 7:00 PM – 8:30 PM: Dinner & recharge
+    addBlock('Dinner & Leisure', 'Dinner, family time, and leisure', '🍽️', 19, 0, 20, 30, const Color(0xFFEA580C), 6, 'Food');
+    // 8:30 PM – 10:30 PM: Learning & reading
+    addBlock('Skill Learning & Reading', 'Books, courses, research, and personal growth', '📖', 20, 30, 22, 30, const Color(0xFF8B5CF6), 7, 'Study');
+    // 10:30 PM – 11:30 PM: Daily review & plan tomorrow
+    addBlock('Daily Review & Planning', 'Reflect on accomplishments, clear tasks, plan tomorrow', '🗓️', 22, 30, 23, 30, const Color(0xFF64748B), 8, 'Productivity');
+    // 11:30 PM – 12:00 AM: Wind down
+    addBlock('Wind Down & Sleep Prep', 'Screen-off relaxation and preparing for rest', '🕯️', 23, 30, 0, 0, const Color(0xFF6366F1), 9, 'Personal Care');
 
     _saveToStorage();
   }
