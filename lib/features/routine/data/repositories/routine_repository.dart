@@ -5,26 +5,37 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/routine.dart';
 import '../models/routine_block.dart';
 
 final routineRepositoryProvider = Provider<RoutineRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return RoutineRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return RoutineRepository(prefs, userId: currentUser?.id);
 });
 
 class RoutineRepository {
-  static const String _routinesKey = 'timora_routines_data';
-  static const String _blocksKey = 'timora_routine_blocks_data';
+  static const String _defaultRoutinesKey = 'timora_routines_data';
+  static const String _defaultBlocksKey = 'timora_routine_blocks_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<Routine> _routines = [];
   final List<RoutineBlock> _blocks = [];
   final _uuid = const Uuid();
 
-  RoutineRepository(this._prefs) {
+  RoutineRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _routinesKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_routines_${_userId}_data'
+      : _defaultRoutinesKey;
+
+  String get _blocksKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_blocks_${_userId}_data'
+      : _defaultBlocksKey;
 
   void _loadFromStorage() {
     final routinesJson = _prefs.getString(_routinesKey);
@@ -162,6 +173,10 @@ class RoutineRepository {
   Future<void> deleteRoutineBlock(String id) async {
     _blocks.removeWhere((b) => b.id == id);
     await _saveToStorage();
+  }
+
+  Future<List<RoutineBlock>> getAllBlocks() async {
+    return List.from(_blocks);
   }
 }
 

@@ -75,7 +75,35 @@ class ProjectsScreen extends ConsumerWidget {
     return asyncProjects.when(
       data: (projects) {
         if (projects.isEmpty) {
-          return Center(child: Text(emptyMsg, style: const TextStyle(color: Colors.grey)));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.folder_open_rounded, size: 48, color: Color(0xFF2563EB)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No projects yet.',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Create your first project to get started.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         return ListView.builder(
           padding: const EdgeInsets.only(top: 16, bottom: 100),

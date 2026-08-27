@@ -9,6 +9,9 @@ import 'package:timora/features/daily_plan/data/repositories/daily_plan_reposito
 import 'package:timora/features/routine/presentation/providers/routine_provider.dart';
 import 'package:timora/features/schedule/presentation/providers/schedule_provider.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
+import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
+import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
+import 'package:timora/features/cloud_sync/services/sync_service.dart';
 
 final selectedDateProvider = StateProvider<DateTime>((ref) {
   return DateTime.now();
@@ -115,20 +118,32 @@ class DailyPlanNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<void> addPlannedBlock(PlannedTaskBlockModel block, DateTime date) async {
     await _repo.saveBlock(block);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'daily_plan_blocks',
+      entityId: block.id,
+      operation: SyncOperation.create,
+    );
     final plan = await _repo.getPlanForDate(date);
     if (plan != null) {
       _ref.invalidate(plannedBlocksProvider(plan.id));
       _ref.invalidate(timelineProvider(date));
     }
+    _ref.read(syncServiceProvider).autoSync();
   }
 
   Future<void> deletePlannedBlock(String blockId, DateTime date) async {
     await _repo.deleteBlock(blockId);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'daily_plan_blocks',
+      entityId: blockId,
+      operation: SyncOperation.delete,
+    );
     final plan = await _repo.getPlanForDate(date);
     if (plan != null) {
       _ref.invalidate(plannedBlocksProvider(plan.id));
       _ref.invalidate(timelineProvider(date));
     }
+    _ref.read(syncServiceProvider).autoSync();
   }
 }
 

@@ -3,22 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/focus_session_model.dart';
 
 final focusRepositoryProvider = Provider<FocusRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return FocusRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return FocusRepository(prefs, userId: currentUser?.id);
 });
 
 class FocusRepository {
-  static const String _storageKey = 'timora_focus_sessions_data';
+  static const String _defaultStorageKey = 'timora_focus_sessions_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<FocusSessionModel> _sessions = [];
 
-  FocusRepository(this._prefs) {
+  FocusRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _storageKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_focus_sessions_${_userId}_data'
+      : _defaultStorageKey;
 
   void _loadFromStorage() {
     final jsonString = _prefs.getString(_storageKey);

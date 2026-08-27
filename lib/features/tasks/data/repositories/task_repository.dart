@@ -5,26 +5,37 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/task_model.dart';
 import '../models/subtask_model.dart';
 
 final taskRepositoryProvider = Provider<TaskRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return TaskRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return TaskRepository(prefs, userId: currentUser?.id);
 });
 
 class TaskRepository {
-  static const String _tasksKey = 'timora_tasks_data';
-  static const String _subtasksKey = 'timora_subtasks_data';
+  static const String _defaultTasksKey = 'timora_tasks_data';
+  static const String _defaultSubtasksKey = 'timora_subtasks_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<TaskModel> _tasks = [];
   final List<SubtaskModel> _subtasks = [];
   final _uuid = const Uuid();
 
-  TaskRepository(this._prefs) {
+  TaskRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _tasksKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_tasks_${_userId}_data'
+      : _defaultTasksKey;
+
+  String get _subtasksKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_subtasks_${_userId}_data'
+      : _defaultSubtasksKey;
 
   void _loadFromStorage() {
     final tasksJson = _prefs.getString(_tasksKey);
@@ -183,6 +194,10 @@ class TaskRepository {
   Future<void> deleteSubtask(String id) async {
     _subtasks.removeWhere((s) => s.id == id);
     await _saveToStorage();
+  }
+
+  Future<List<SubtaskModel>> getAllSubtasks() async {
+    return List.from(_subtasks);
   }
 }
 

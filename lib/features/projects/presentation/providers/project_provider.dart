@@ -2,6 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timora/features/projects/data/models/project_model.dart';
 import 'package:timora/features/projects/data/repositories/project_repository.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
+import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
+import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
+import 'package:timora/features/cloud_sync/services/sync_service.dart';
 
 final allProjectsProvider = FutureProvider<List<ProjectModel>>((ref) async {
   final repo = ref.watch(projectRepositoryProvider);
@@ -49,39 +52,71 @@ class ProjectNotifier extends StateNotifier<AsyncValue<void>> {
 
   ProjectNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
 
+  void _notifyRelated(String projectId) {
+    _ref.invalidate(allProjectsProvider);
+    _ref.invalidate(projectDetailsProvider(projectId));
+    _ref.invalidate(projectProgressProvider(projectId));
+    _ref.read(syncServiceProvider).autoSync();
+  }
+
   Future<void> createProject(ProjectModel project) async {
     await _repo.createProject(project);
-    _ref.invalidate(allProjectsProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'projects',
+      entityId: project.id,
+      operation: SyncOperation.create,
+    );
+    _notifyRelated(project.id);
   }
 
   Future<void> updateProject(ProjectModel project) async {
     await _repo.updateProject(project);
-    _ref.invalidate(allProjectsProvider);
-    _ref.invalidate(projectDetailsProvider(project.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'projects',
+      entityId: project.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(project.id);
   }
 
   Future<void> deleteProject(String id) async {
     await _repo.deleteProject(id);
-    _ref.invalidate(allProjectsProvider);
-    _ref.invalidate(projectDetailsProvider(id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'projects',
+      entityId: id,
+      operation: SyncOperation.delete,
+    );
+    _notifyRelated(id);
   }
   
   Future<void> pauseProject(ProjectModel project) async {
     await _repo.updateProject(project.copyWith(status: ProjectStatus.paused));
-    _ref.invalidate(allProjectsProvider);
-    _ref.invalidate(projectDetailsProvider(project.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'projects',
+      entityId: project.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(project.id);
   }
   
   Future<void> completeProject(ProjectModel project) async {
     await _repo.updateProject(project.copyWith(status: ProjectStatus.completed, completedAt: DateTime.now()));
-    _ref.invalidate(allProjectsProvider);
-    _ref.invalidate(projectDetailsProvider(project.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'projects',
+      entityId: project.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(project.id);
   }
   
   Future<void> archiveProject(ProjectModel project) async {
     await _repo.updateProject(project.copyWith(status: ProjectStatus.archived));
-    _ref.invalidate(allProjectsProvider);
-    _ref.invalidate(projectDetailsProvider(project.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'projects',
+      entityId: project.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(project.id);
   }
 }
 

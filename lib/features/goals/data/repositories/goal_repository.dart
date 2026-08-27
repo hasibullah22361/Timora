@@ -4,26 +4,37 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/goal_model.dart';
 import '../models/milestone_model.dart';
 
 final goalRepositoryProvider = Provider<GoalRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return GoalRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return GoalRepository(prefs, userId: currentUser?.id);
 });
 
 class GoalRepository {
-  static const String _goalsKey = 'timora_goals_data';
-  static const String _milestonesKey = 'timora_milestones_data';
+  static const String _defaultGoalsKey = 'timora_goals_data';
+  static const String _defaultMilestonesKey = 'timora_milestones_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<GoalModel> _goals = [];
   final List<MilestoneModel> _milestones = [];
   final _uuid = const Uuid();
 
-  GoalRepository(this._prefs) {
+  GoalRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _goalsKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_goals_${_userId}_data'
+      : _defaultGoalsKey;
+
+  String get _milestonesKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_milestones_${_userId}_data'
+      : _defaultMilestonesKey;
 
   void _loadFromStorage() {
     final goalsJson = _prefs.getString(_goalsKey);
@@ -178,6 +189,10 @@ class GoalRepository {
       }
     }
     await _saveToStorage();
+  }
+
+  Future<List<MilestoneModel>> getAllMilestones() async {
+    return List.from(_milestones);
   }
 }
 

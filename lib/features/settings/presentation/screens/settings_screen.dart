@@ -5,7 +5,7 @@ import 'planning_settings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'data_privacy_screen.dart';
 import 'package:timora/features/cloud_sync/presentation/screens/cloud_account_screen.dart';
-import 'package:timora/features/ai_assistant/presentation/screens/ai_privacy_settings_screen.dart';
+import 'package:timora/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:timora/features/focus/presentation/screens/focus_history_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -69,7 +69,6 @@ class SettingsScreen extends StatelessWidget {
             );
           }),
           const Divider(),
-          _buildSectionHeader(context, 'Customization'),
           _buildSettingsTile(
               context, 'Dashboard Layout', Icons.dashboard_customize, () {
             Navigator.push(
@@ -77,19 +76,19 @@ class SettingsScreen extends StatelessWidget {
                 MaterialPageRoute(
                     builder: (_) => const DashboardSettingsScreen()));
           }),
-          _buildSettingsTile(context, 'AI & Intelligence', Icons.auto_awesome,
-              () {
-            Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const AIPrivacySettingsScreen()));
-          }),
           _buildSettingsTile(context, 'Notifications & Reminders',
               Icons.notifications_outlined, () {
             Navigator.push(
                 context,
                 MaterialPageRoute(
                     builder: (_) => const NotificationSettingsScreen()));
+          }),
+          _buildSettingsTile(
+              context, 'App Walkthrough', Icons.auto_stories_outlined, () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+            );
           }),
           const Divider(),
           _buildSectionHeader(context, 'Account'),
@@ -108,10 +107,19 @@ class SettingsScreen extends StatelessWidget {
               context: context,
               applicationName: 'Timora',
               applicationVersion: '1.0.0',
-              applicationIcon: const Icon(Icons.timer, size: 48, color: Color(0xFF2962FF)),
+              applicationLegalese: 'Make Time Work for You.',
+              applicationIcon: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/app_icon.png',
+                  width: 48,
+                  height: 48,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.schedule_send_rounded, size: 48, color: Color(0xFF2563EB)),
+                ),
+              ),
               children: const [
                 Text(
-                  'Timora is your all-in-one personal productivity and daily routine management assistant. Plan your days, master study sessions, and accomplish your goals.',
+                  'Timora is your all-in-one personal productivity and daily routine management assistant. Plan your days, master focus sessions, and accomplish your goals.',
                 ),
               ],
             );

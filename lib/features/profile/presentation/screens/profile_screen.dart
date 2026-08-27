@@ -1,21 +1,102 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:timora/features/settings/presentation/screens/settings_screen.dart';
 import 'package:timora/features/settings/presentation/screens/appearance_settings_screen.dart';
 import 'package:timora/features/settings/presentation/screens/notification_settings_screen.dart';
 import 'package:timora/features/settings/presentation/screens/dashboard_settings_screen.dart';
 import 'package:timora/features/settings/presentation/screens/data_privacy_screen.dart';
 import 'package:timora/features/cloud_sync/presentation/screens/cloud_account_screen.dart';
-import 'package:timora/features/ai_assistant/presentation/screens/ai_assistant_screen.dart';
-import 'package:timora/features/ai_assistant/presentation/screens/ai_privacy_settings_screen.dart';
 import 'package:timora/features/auth/presentation/screens/login_screen.dart';
+import 'package:timora/features/auth/presentation/providers/auth_provider.dart';
 import '../providers/user_profile_provider.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
-  void _handleLogout(BuildContext context) async {
+  Future<void> _pickImage(BuildContext context, WidgetRef ref, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 88,
+      );
+
+      if (picked != null) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final fileName = 'profile_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
+        
+        final current = ref.read(userProfileProvider);
+        await ref.read(userProfileProvider.notifier).updateProfile(
+          current.copyWith(customImagePath: savedImage.path),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update image: $e')),
+        );
+      }
+    }
+  }
+
+  void _showImageOptions(BuildContext context, WidgetRef ref) {
+    final profile = ref.read(userProfileProvider);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Profile Photo', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF2563EB)),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImage(context, ref, ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined, color: Color(0xFF10B981)),
+                title: const Text('Take a Photo'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImage(context, ref, ImageSource.camera);
+                },
+              ),
+              if (profile.hasCustomImage)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('Remove Photo', style: TextStyle(color: Colors.red)),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await ref.read(userProfileProvider.notifier).updateProfile(
+                      profile.copyWith(clearCustomImage: true),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleLogout(BuildContext context, WidgetRef ref) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -36,10 +117,13 @@ class ProfileScreen extends ConsumerWidget {
     );
 
     if (confirm == true && context.mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+      await ref.read(authControllerProvider.notifier).logout();
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
     }
   }
 
@@ -47,6 +131,7 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final profile = ref.watch(userProfileProvider);
+    final hasCustom = profile.hasCustomImage && File(profile.customImagePath!).existsSync();
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -89,40 +174,57 @@ class ProfileScreen extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    // Avatar with badge
+                    // Avatar with badge & tap to change
                     Stack(
                       children: [
-                        Container(
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(
-                            color: profile.avatarColor.withValues(alpha: 0.18),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: profile.avatarColor, width: 2.5),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            profile.avatarPreset,
-                            style: const TextStyle(fontSize: 34),
+                        InkWell(
+                          onTap: () => _showImageOptions(context, ref),
+                          borderRadius: BorderRadius.circular(36),
+                          child: Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              color: profile.avatarColor.withValues(alpha: 0.18),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: profile.avatarColor, width: 2.5),
+                            ),
+                            alignment: Alignment.center,
+                            child: hasCustom
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(36),
+                                    child: Image.file(
+                                      File(profile.customImagePath!),
+                                      width: 72,
+                                      height: 72,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                : Text(
+                                    profile.avatarPreset,
+                                    style: const TextStyle(fontSize: 34),
+                                  ),
                           ),
                         ),
-                        Positioned(
+                        PositionedDirectional(
                           bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
+                          end: 0,
+                          child: InkWell(
+                            onTap: () => _showImageOptions(context, ref),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: theme.colorScheme.surface, width: 2),
+                              ),
+                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 12),
                             ),
-                            child: const Icon(Icons.edit, size: 12, color: Colors.white),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(width: 16),
-                    // Names & Email
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,7 +239,7 @@ class ProfileScreen extends ConsumerWidget {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: theme.colorScheme.primary.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(6),
@@ -146,23 +248,19 @@ class ProfileScreen extends ConsumerWidget {
                                   '@${profile.username}',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w600,
                                     color: theme.colorScheme.primary,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  profile.email,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
                             ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            profile.email,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                           ),
                         ],
                       ),
@@ -173,13 +271,13 @@ class ProfileScreen extends ConsumerWidget {
                   const SizedBox(height: 14),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '"${profile.bio}"',
+                      profile.bio,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontStyle: FontStyle.italic,
                         color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
@@ -197,11 +295,11 @@ class ProfileScreen extends ConsumerWidget {
                         MaterialPageRoute(builder: (_) => const EditProfileScreen()),
                       );
                     },
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: const Text('Edit Profile & Preferences'),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Edit Profile & Goals'),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
@@ -211,286 +309,295 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 24),
 
           // -------------------------------------------------------------
-          // 2. My Productivity & Goals
+          // 2. My Productivity Target Cards
           // -------------------------------------------------------------
-          _buildSectionHeader(context, 'My Productivity'),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.6)),
-            ),
-            child: Column(
-              children: [
-                _buildStatRow(
+          _buildSectionHeader(context, 'My Productivity Profile'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
                   context,
-                  icon: Icons.track_changes,
-                  iconColor: Colors.blue,
-                  title: 'Daily Productivity Goal',
-                  value: '${profile.dailyGoalHours.toStringAsFixed(1)} hours / day',
+                  title: 'Daily Focus',
+                  value: '${profile.dailyGoalHours.toStringAsFixed(0)}h',
+                  subtitle: 'Target hours',
+                  icon: Icons.timer_outlined,
+                  color: const Color(0xFF2563EB),
                 ),
-                const Divider(height: 24),
-                _buildStatRow(
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricCard(
                   context,
-                  icon: Icons.access_time_rounded,
-                  iconColor: Colors.orange,
-                  title: 'Preferred Working Hours',
-                  value: '${profile.workHoursStart.format(context)} – ${profile.workHoursEnd.format(context)}',
+                  title: 'Daily Tasks',
+                  value: '${profile.dailyTaskGoal}',
+                  subtitle: 'Target todos',
+                  icon: Icons.task_alt_outlined,
+                  color: const Color(0xFF10B981),
                 ),
-                const Divider(height: 24),
-                _buildStatRow(
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
                   context,
-                  icon: Icons.repeat_rounded,
-                  iconColor: Colors.teal,
+                  title: 'Working Hours',
+                  value: '${profile.workHoursStart.format(context)} - ${profile.workHoursEnd.format(context)}',
+                  subtitle: 'Active schedule',
+                  icon: Icons.access_time_outlined,
+                  color: const Color(0xFFF59E0B),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricCard(
+                  context,
                   title: 'Routine Style',
                   value: profile.routinePreference,
+                  subtitle: 'Workflow mode',
+                  icon: Icons.dashboard_customize_outlined,
+                  color: const Color(0xFF8B5CF6),
                 ),
-                const Divider(height: 24),
-                _buildStatRow(
-                  context,
-                  icon: Icons.check_circle_outline,
-                  iconColor: Colors.green,
-                  title: 'Daily Task Target',
-                  value: '${profile.dailyTaskGoal} tasks / day',
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
 
           // -------------------------------------------------------------
-          // 3. Preferences Section
+          // 3. App & Notification Preferences
           // -------------------------------------------------------------
           _buildSectionHeader(context, 'Preferences'),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.6)),
-            ),
-            child: Column(
-              children: [
-                _buildListTile(
-                  context,
-                  icon: Icons.palette_outlined,
-                  iconColor: const Color(0xFF8B5CF6),
-                  title: 'Theme & Appearance',
-                  subtitle: 'Light, Dark, and System Theme',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen())),
-                ),
-                const Divider(height: 1),
-                _buildListTile(
-                  context,
-                  icon: Icons.notifications_outlined,
-                  iconColor: const Color(0xFFF59E0B),
-                  title: 'Notifications & Reminders',
-                  subtitle: 'Activity alarms and daily summaries',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen())),
-                ),
-                const Divider(height: 1),
-                _buildListTile(
-                  context,
-                  icon: Icons.public,
-                  iconColor: const Color(0xFF06B6D4),
-                  title: 'Timezone',
-                  subtitle: profile.timezone,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen())),
-                ),
-                const Divider(height: 1),
-                _buildListTile(
-                  context,
-                  icon: Icons.dashboard_customize_outlined,
-                  iconColor: const Color(0xFF10B981),
-                  title: 'Dashboard Layout',
-                  subtitle: 'Customize visible widgets and cards',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardSettingsScreen())),
-                ),
-              ],
-            ),
+          _buildActionTile(
+            context,
+            icon: Icons.palette_outlined,
+            title: 'Appearance',
+            subtitle: 'Theme, colors, and visual layout',
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen()));
+            },
+          ),
+          _buildActionTile(
+            context,
+            icon: Icons.notifications_outlined,
+            title: 'Notifications & Spoken Announcements',
+            subtitle: 'Activity reminders, voice output, sound, vibration',
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()));
+            },
+          ),
+          _buildActionTile(
+            context,
+            icon: Icons.public_outlined,
+            title: 'Timezone',
+            subtitle: profile.timezone,
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+            },
+          ),
+          _buildActionTile(
+            context,
+            icon: Icons.dashboard_customize_outlined,
+            title: 'Dashboard Widgets',
+            subtitle: 'Reorder or toggle dashboard cards',
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardSettingsScreen()));
+            },
           ),
           const SizedBox(height: 24),
 
           // -------------------------------------------------------------
-          // 4. AI & Intelligence Section
+          // 4. Data, Security & Account
           // -------------------------------------------------------------
-          _buildSectionHeader(context, 'AI & Assistant'),
+          _buildSectionHeader(context, 'Data & Account'),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.6)),
-            ),
-            child: Column(
-              children: [
-                _buildListTile(
-                  context,
-                  icon: Icons.auto_awesome,
-                  iconColor: const Color(0xFF6366F1),
-                  title: 'Timora AI Assistant',
-                  subtitle: 'Plan days, prioritize tasks, optimize routines',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AIAssistantScreen())),
-                ),
-                const Divider(height: 1),
-                _buildListTile(
-                  context,
-                  icon: Icons.shield_outlined,
-                  iconColor: const Color(0xFF64748B),
-                  title: 'AI Privacy & Settings',
-                  subtitle: 'Manage local AI context and data handling',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AIPrivacySettingsScreen())),
-                ),
-              ],
-            ),
+          _buildActionTile(
+            context,
+            icon: Icons.cloud_sync_outlined,
+            title: 'Cloud Backup & Sync',
+            subtitle: 'Sync tasks, schedule, routines & goals',
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const CloudAccountScreen()));
+            },
           ),
-          const SizedBox(height: 24),
-
-          // -------------------------------------------------------------
-          // 5. Account & System Section
-          // -------------------------------------------------------------
-          _buildSectionHeader(context, 'Account & Security'),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.6)),
-            ),
-            child: Column(
-              children: [
-                _buildListTile(
-                  context,
-                  icon: Icons.cloud_sync_outlined,
-                  iconColor: const Color(0xFF2563EB),
-                  title: 'Cloud Sync & Account',
-                  subtitle: 'Backup your data and sync devices',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CloudAccountScreen())),
-                ),
-                const Divider(height: 1),
-                _buildListTile(
-                  context,
-                  icon: Icons.lock_outline,
-                  iconColor: const Color(0xFF0D9488),
-                  title: 'Data & Privacy',
-                  subtitle: 'Export, import, and backup your data',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DataPrivacyScreen())),
-                ),
-                const Divider(height: 1),
-                _buildListTile(
-                  context,
-                  icon: Icons.tune,
-                  iconColor: const Color(0xFF64748B),
-                  title: 'All Settings',
-                  subtitle: 'Complete Timora settings center',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-                ),
-                const Divider(height: 1),
-                _buildListTile(
-                  context,
-                  icon: Icons.logout,
-                  iconColor: Colors.red,
-                  title: 'Log Out',
-                  subtitle: 'Sign out of your session',
-                  titleColor: Colors.red,
-                  onTap: () => _handleLogout(context),
-                ),
-              ],
-            ),
+          _buildActionTile(
+            context,
+            icon: Icons.security_outlined,
+            title: 'Data & Privacy',
+            subtitle: 'Export data, import backups, manage storage',
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const DataPrivacyScreen()));
+            },
           ),
-          const SizedBox(height: 40),
+          _buildActionTile(
+            context,
+            icon: Icons.settings_outlined,
+            title: 'All App Settings',
+            subtitle: 'Full configuration and options',
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            },
+          ),
+          _buildActionTile(
+            context,
+            icon: Icons.logout_rounded,
+            title: 'Log Out',
+            subtitle: 'Safely sign out from current session',
+            titleColor: Colors.red,
+            iconColor: Colors.red,
+            onTap: () => _handleLogout(context, ref),
+          ),
+          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
   Widget _buildSectionHeader(BuildContext context, String title) {
-    final theme = Theme.of(context);
     return Text(
       title,
-      style: theme.textTheme.titleSmall?.copyWith(
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
         fontWeight: FontWeight.bold,
-        color: theme.colorScheme.primary,
+        color: Theme.of(context).colorScheme.primary,
         letterSpacing: 0.5,
       ),
     );
   }
 
-  Widget _buildStatRow(BuildContext context, {
-    required IconData icon,
-    required Color iconColor,
+  Widget _buildMetricCard(
+    BuildContext context, {
     required String title,
     required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
   }) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 16, color: color),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-          child: Icon(icon, size: 20, color: iconColor),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Text(
-            title,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
-        ),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildListTile(
+  Widget _buildActionTile(
     BuildContext context, {
     required IconData icon,
-    required Color iconColor,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
     Color? titleColor,
+    Color? iconColor,
   }) {
     final theme = Theme.of(context);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6.0),
+      child: Material(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (iconColor ?? theme.colorScheme.primary).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 20, color: iconColor ?? theme.colorScheme.primary),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: titleColor ?? theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Icon(icon, size: 20, color: iconColor),
       ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-          color: titleColor ?? theme.colorScheme.onSurface,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-        ),
-      ),
-      trailing: const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
-      onTap: onTap,
     );
   }
 }

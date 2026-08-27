@@ -3,24 +3,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/review_models.dart';
 
 final reviewRepositoryProvider = Provider<ReviewRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return ReviewRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return ReviewRepository(prefs, userId: currentUser?.id);
 });
 
 class ReviewRepository {
-  static const String _reviewsKey = 'timora_reviews_data';
-  static const String _reflectionsKey = 'timora_review_reflections_data';
+  static const String _defaultReviewsKey = 'timora_reviews_data';
+  static const String _defaultReflectionsKey = 'timora_review_reflections_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<ReviewModel> _reviews = [];
   final List<ReviewReflectionModel> _reflections = [];
 
-  ReviewRepository(this._prefs) {
+  ReviewRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _reviewsKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_reviews_${_userId}_data'
+      : _defaultReviewsKey;
+
+  String get _reflectionsKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_reflections_${_userId}_data'
+      : _defaultReflectionsKey;
 
   void _loadFromStorage() {
     final reviewsJson = _prefs.getString(_reviewsKey);

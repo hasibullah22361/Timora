@@ -5,10 +5,10 @@ import 'ai_provider.dart';
 import '../models/ai_models.dart';
 
 final aiProvider = Provider<AIProvider>((ref) {
-  return MockAIProvider();
+  return DynamicContextAIProvider();
 });
 
-class MockAIProvider implements AIProvider {
+class DynamicContextAIProvider implements AIProvider {
   final _uuid = const Uuid();
 
   @override
@@ -17,139 +17,199 @@ class MockAIProvider implements AIProvider {
     required String contextContext,
     required List<AIMessage> history,
   }) async {
-    // Simulate natural response latency
-    await Future.delayed(const Duration(milliseconds: 1200));
-    
+    // Natural slight latency for conversational feel
+    await Future.delayed(const Duration(milliseconds: 900));
+
     final lower = prompt.toLowerCase();
-    
-    // 1. Plan my day / Plan tomorrow
-    if (lower.contains('plan my day') || lower.contains('plan tomorrow') || lower.contains('tomorrow\'s plan')) {
+    final lines = contextContext.split('\n');
+
+    // Extract real tasks, goals, and schedule from context if available
+    final pendingTasks = lines
+        .where((l) => l.trim().startsWith('- [Priority:'))
+        .map((l) => l.replaceAll(RegExp(r'^- \[Priority:\s*\w+\]\s*'), '').trim())
+        .toList();
+
+    final activeGoals = lines
+        .where((l) => l.trim().startsWith('- ') && l.contains('(Progress:'))
+        .map((l) => l.replaceAll(RegExp(r'^- '), '').split('(').first.trim())
+        .toList();
+
+    // -------------------------------------------------------------
+    // 1. "Plan my day" / "Help me organize today"
+    // -------------------------------------------------------------
+    if (lower.contains('plan my day') || lower.contains('organize today') || lower.contains('plan today')) {
+      final task1 = pendingTasks.isNotEmpty ? pendingTasks[0] : 'Deep Focus: Priority Execution';
+      final task2 = pendingTasks.length > 1 ? pendingTasks[1] : 'Core Milestone Execution';
+      final task3 = pendingTasks.length > 2 ? pendingTasks[2] : 'Daily Review & Inbox Zero';
+
       return AIMessage(
         id: _uuid.v4(),
         role: AIMessageRole.assistant,
-        content: "I've analyzed your schedule and active goals. Here is an optimized plan that pairs your highest priority tasks with dedicated focus blocks during your peak productivity hours.",
+        content: "Here is your personalized daily plan tailored to your timeline and target focus hours:\n\n"
+            "🌅 **Morning (Deep Work)**\n"
+            "• 9:00 AM – 11:30 AM: Deep Focus Session on **$task1**\n"
+            "• 11:30 AM – 11:45 AM: Active Break & Hydration\n\n"
+            "☀️ **Midday (Momentum Block)**\n"
+            "• 12:00 PM – 1:30 PM: Complete **$task2**\n"
+            "• 1:30 PM – 2:30 PM: Lunch & Rest\n\n"
+            "🌆 **Afternoon & Evening (Wrap Up)**\n"
+            "• 2:30 PM – 5:00 PM: Focus on **$task3**\n"
+            "• 5:00 PM – 6:00 PM: Review progress, update goals & plan tomorrow",
         createdAt: DateTime.now(),
         actionPayload: AIActionPayload(
-          summary: "Scheduled 2 deep focus blocks and prioritized 2 key deliverables for your day.",
+          summary: "Structured your day with 2 deep focus blocks and scheduled top deliverables.",
           confidence: "high",
           actions: [
             AIAction(
               id: _uuid.v4(),
               type: AIActionType.createFocusSession,
-              data: {
-                'title': 'Morning Deep Work: Priority Execution',
-                'durationSeconds': 3000,
-                'time': '09:00',
-              },
+              data: {'title': 'Morning Deep Focus: $task1', 'durationSeconds': 3600, 'time': '09:00'},
             ),
             AIAction(
               id: _uuid.v4(),
               type: AIActionType.createTask,
-              data: {
-                'title': 'Finalize core project milestone',
-                'priority': 'high',
-              },
-            ),
-            AIAction(
-              id: _uuid.v4(),
-              type: AIActionType.createTask,
-              data: {
-                'title': 'Review weekly progress and clear inbox',
-                'priority': 'medium',
-              },
+              data: {'title': task1, 'priority': 'high'},
             ),
           ],
         ),
       );
     }
-    
-    // 2. Create a routine
-    if (lower.contains('create a routine') || lower.contains('routine')) {
-      return AIMessage(
-        id: _uuid.v4(),
-        role: AIMessageRole.assistant,
-        content: "Here is a high-performance daily routine recommendation designed for maximum sustained energy, deep work, and evening recovery:\n\n• **7:30 AM – 8:30 AM**: Morning Routine & Nutritious Breakfast\n• **8:30 AM – 12:30 PM**: Deep Focus Block 1 (High cognitive demand)\n• **12:30 PM – 1:30 PM**: Lunch & Walk\n• **1:30 PM – 5:30 PM**: Deep Focus Block 2 (Execution & Collaboration)\n• **5:30 PM – 7:00 PM**: Exercise & Wellbeing\n• **7:00 PM – 8:30 PM**: Dinner & Relaxation\n• **8:30 PM – 10:30 PM**: Reading & Skill Learning\n• **10:30 PM – 11:30 PM**: Daily Review & Tomorrow's Plan",
-        createdAt: DateTime.now(),
-      );
-    }
 
-    // 3. Break goal into tasks
-    if (lower.contains('break a goal') || lower.contains('break goal') || lower.contains('goal into tasks')) {
+    // -------------------------------------------------------------
+    // 2. "Plan tomorrow" / "Tomorrow's plan"
+    // -------------------------------------------------------------
+    if (lower.contains('plan tomorrow') || lower.contains('tomorrow')) {
+      final topGoal = activeGoals.isNotEmpty ? activeGoals.first : 'Primary Goal';
+      final topTask = pendingTasks.isNotEmpty ? pendingTasks.first : 'Key Priority Item';
+
       return AIMessage(
         id: _uuid.v4(),
         role: AIMessageRole.assistant,
-        content: "I've structured a 4-step action plan to break down your main goal into manageable, actionable steps:",
+        content: "Here is an optimized roadmap for tomorrow designed to build early momentum:\n\n"
+            "🎯 **Top Objective**: Advance **$topGoal**\n\n"
+            "⏰ **Tomorrow's Recommended Schedule**:\n"
+            "• **8:30 AM – 9:00 AM**: Morning Planning & Alignment\n"
+            "• **9:00 AM – 11:30 AM**: 2.5-hour Deep Work window on **$topTask**\n"
+            "• **11:30 AM – 12:30 PM**: Secondary tasks & follow-ups\n"
+            "• **12:30 PM – 1:30 PM**: Lunch break\n"
+            "• **1:30 PM – 4:30 PM**: Execution block & project deliverables\n"
+            "• **4:30 PM – 5:30 PM**: Habit reflection & daily review",
         createdAt: DateTime.now(),
         actionPayload: AIActionPayload(
-          summary: "Created 3 sequential milestone tasks to build momentum towards your goal.",
+          summary: "Created prioritized schedule and milestone block for tomorrow.",
           confidence: "high",
           actions: [
             AIAction(
               id: _uuid.v4(),
               type: AIActionType.createTask,
-              data: {
-                'title': 'Phase 1: Define project scope & gather resources',
-                'priority': 'high',
-              },
-            ),
-            AIAction(
-              id: _uuid.v4(),
-              type: AIActionType.createTask,
-              data: {
-                'title': 'Phase 2: Build working prototype / initial draft',
-                'priority': 'high',
-              },
-            ),
-            AIAction(
-              id: _uuid.v4(),
-              type: AIActionType.createTask,
-              data: {
-                'title': 'Phase 3: Review feedback & finalize delivery',
-                'priority': 'medium',
-              },
+              data: {'title': 'Tomorrow Priority: $topTask', 'priority': 'high'},
             ),
           ],
         ),
       );
     }
 
-    // 4. Prioritize tasks
-    if (lower.contains('prioritize') || lower.contains('priority')) {
+    // -------------------------------------------------------------
+    // 3. "Create a weekly plan" / "Weekly plan"
+    // -------------------------------------------------------------
+    if (lower.contains('weekly plan') || lower.contains('plan week') || lower.contains('week plan')) {
       return AIMessage(
         id: _uuid.v4(),
         role: AIMessageRole.assistant,
-        content: "Using the Eisenhower Matrix principle, I suggest prioritizing your tasks as follows:\n\n1. 🔥 **Urgent & High Impact**: Complete pending milestone deliverables.\n2. 📈 **High Impact & Scheduled**: 90-minute Deep Focus block.\n3. 📝 **Maintenance**: Inbox clearance and workspace organizing.\n\nFocus on finishing the top task before switching contexts.",
+        content: "Here is a balanced 7-day productivity framework to maximize progress while preventing burnout:\n\n"
+            "📅 **Monday – Wednesday (High Output & Deep Focus)**\n"
+            "• Prioritize heavy cognitive tasks and primary deliverables during morning peak hours.\n"
+            "• Target 4+ hours of deep work daily.\n\n"
+            "📅 **Thursday – Friday (Execution & Delivery)**\n"
+            "• Finalize weekly task backlog, reviews, and collaborative syncs.\n"
+            "• Wrap up milestone targets.\n\n"
+            "📅 **Saturday – Sunday (Recharge & Strategic Review)**\n"
+            "• Dedicate time for health, family, reflection, and setting next week's targets.",
         createdAt: DateTime.now(),
       );
     }
 
-    // 5. Analyze productivity
-    if (lower.contains('analyze') || lower.contains('productivity')) {
+    // -------------------------------------------------------------
+    // 4. "Help me complete my goals" / "Break a goal into tasks"
+    // -------------------------------------------------------------
+    if (lower.contains('goal') || lower.contains('break down') || lower.contains('milestone')) {
+      final goalName = activeGoals.isNotEmpty ? activeGoals.first : 'Active Milestone';
       return AIMessage(
         id: _uuid.v4(),
         role: AIMessageRole.assistant,
-        content: "📊 **Productivity Insights**:\n\n• **Focus Consistency**: High morning focus output between 9 AM - 12 PM.\n• **Task Completion Rate**: Solid momentum with positive streak.\n• **Recommendation**: Protect your morning 90-minute focus window from minor administrative tasks to maintain peak creative flow.",
+        content: "To make steady progress on **$goalName**, let's break it down into high-impact micro-steps:\n\n"
+            "1. 📌 **Step 1 (Clarification)**: Define the exact outcome and success criteria for this week.\n"
+            "2. ⚡ **Step 2 (Execution)**: Complete the initial core deliverable in a single 60-minute focus session.\n"
+            "3. 🔍 **Step 3 (Refinement)**: Review work, address roadblocks, and iterate.\n"
+            "4. 🏁 **Step 4 (Completion)**: Final check and mark milestone as completed.",
+        createdAt: DateTime.now(),
+        actionPayload: AIActionPayload(
+          summary: "Created 3 milestone action tasks for '$goalName'.",
+          confidence: "high",
+          actions: [
+            AIAction(
+              id: _uuid.v4(),
+              type: AIActionType.createTask,
+              data: {'title': 'Step 1: Define weekly scope for $goalName', 'priority': 'high'},
+            ),
+            AIAction(
+              id: _uuid.v4(),
+              type: AIActionType.createTask,
+              data: {'title': 'Step 2: 60-min execution session for $goalName', 'priority': 'high'},
+            ),
+          ],
+        ),
+      );
+    }
+
+    // -------------------------------------------------------------
+    // 5. "What should I focus on now?"
+    // -------------------------------------------------------------
+    if (lower.contains('focus on now') || lower.contains('what should i do') || lower.contains('right now')) {
+      final immediateTask = pendingTasks.isNotEmpty ? pendingTasks.first : 'Your highest priority scheduled activity';
+      return AIMessage(
+        id: _uuid.v4(),
+        role: AIMessageRole.assistant,
+        content: "🎯 **Immediate Focus Recommendation**:\n\n"
+            "Dedicate the next **45 minutes** to: **$immediateTask**.\n\n"
+            "💡 *Tips to stay locked in*:\n"
+            "• Put phone on Do Not Disturb\n"
+            "• Close unrelated browser tabs\n"
+            "• Keep a water bottle nearby\n"
+            "• Focus purely on this single task until the timer ends.",
         createdAt: DateTime.now(),
       );
     }
 
-    // 6. Suggest breaks / Better schedule
-    if (lower.contains('suggest break') || lower.contains('breaks') || lower.contains('suggest a better schedule')) {
+    // -------------------------------------------------------------
+    // 6. "Improve my schedule" / "Suggest breaks"
+    // -------------------------------------------------------------
+    if (lower.contains('improve schedule') || lower.contains('better schedule') || lower.contains('break') || lower.contains('routine')) {
       return AIMessage(
         id: _uuid.v4(),
         role: AIMessageRole.assistant,
-        content: "💡 **Schedule Optimization Tip**:\n\n• Insert a 10-minute screen-free break after every 50 minutes of deep work.\n• Hydrate and do a quick 3-minute posture stretch between afternoon blocks.\n• Keep 30 minutes of open buffer time before dinner to avoid cognitive overload.",
+        content: "💡 **Schedule Optimization Recommendations**:\n\n"
+            "1. **Protect Morning Focus**: Keep your first 2 hours dedicated to deep work before answering messages.\n"
+            "2. **Add Buffer Intervals**: Add 10-15 minutes of buffer between activities to avoid cognitive fatigue.\n"
+            "3. **Hydration & Movement**: Take a 3-minute stretch and water break after every 50 minutes of focused effort.\n"
+            "4. **Evening Shutdown**: Conclude work at least 1 hour before bed for better recovery and sleep quality.",
         createdAt: DateTime.now(),
       );
     }
 
-    // Default friendly conversational response
+    // -------------------------------------------------------------
+    // 7. General Intelligent Productivity Query
+    // -------------------------------------------------------------
+    final contextHint = pendingTasks.isNotEmpty
+        ? "You currently have ${pendingTasks.length} pending tasks (starting with '${pendingTasks.first}')."
+        : "Your workspace is ready for new daily goals and routine planning.";
+
     return AIMessage(
       id: _uuid.v4(),
       role: AIMessageRole.assistant,
-      content: "I'm your Timora AI Productivity Assistant. I can help you plan your day, optimize your routine, prioritize tasks, and breakdown large goals into daily actions. What would you like to achieve today?",
+      content: "I'm your **Timora AI Productivity Assistant**. $contextHint\n\n"
+          "How can I help you today? I can organize your day, prioritize tasks, suggest schedule improvements, or break down large goals into daily action steps.",
       createdAt: DateTime.now(),
     );
   }
 }
-

@@ -6,8 +6,9 @@ class UserProfile {
   final String username;
   final String email;
   final String bio;
-  final String avatarPreset; // e.g. 'avatar_1', 'avatar_2', or custom emoji/url
+  final String avatarPreset; // e.g. '⚡', '🚀', or custom emoji
   final int avatarColorValue;
+  final String? customImagePath; // Local file path to user's gallery photo
   final String timezone;
   final int workHoursStartMinutes; // minutes from midnight (e.g. 540 = 9:00 AM)
   final int workHoursEndMinutes; // minutes from midnight (e.g. 1080 = 6:00 PM)
@@ -25,8 +26,9 @@ class UserProfile {
     required this.username,
     required this.email,
     this.bio = 'Optimizing time, building routines, and staying focused.',
-    this.avatarPreset = '🚀',
+    this.avatarPreset = '⚡',
     this.avatarColorValue = 0xFF2563EB,
+    this.customImagePath,
     this.timezone = 'UTC+05:00 - Islamabad, Karachi',
     this.workHoursStartMinutes = 540, // 9:00 AM
     this.workHoursEndMinutes = 1080, // 6:00 PM
@@ -38,6 +40,8 @@ class UserProfile {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  bool get hasCustomImage => customImagePath != null && customImagePath!.isNotEmpty;
 
   Color get avatarColor => Color(avatarColorValue);
 
@@ -59,6 +63,8 @@ class UserProfile {
     String? bio,
     String? avatarPreset,
     int? avatarColorValue,
+    String? customImagePath,
+    bool clearCustomImage = false,
     String? timezone,
     int? workHoursStartMinutes,
     int? workHoursEndMinutes,
@@ -77,6 +83,7 @@ class UserProfile {
       bio: bio ?? this.bio,
       avatarPreset: avatarPreset ?? this.avatarPreset,
       avatarColorValue: avatarColorValue ?? this.avatarColorValue,
+      customImagePath: clearCustomImage ? null : (customImagePath ?? this.customImagePath),
       timezone: timezone ?? this.timezone,
       workHoursStartMinutes: workHoursStartMinutes ?? this.workHoursStartMinutes,
       workHoursEndMinutes: workHoursEndMinutes ?? this.workHoursEndMinutes,
@@ -99,6 +106,7 @@ class UserProfile {
       'bio': bio,
       'avatarPreset': avatarPreset,
       'avatarColorValue': avatarColorValue,
+      'customImagePath': customImagePath,
       'timezone': timezone,
       'workHoursStartMinutes': workHoursStartMinutes,
       'workHoursEndMinutes': workHoursEndMinutes,
@@ -129,8 +137,9 @@ class UserProfile {
       username: json['username'] as String? ?? 'alexj',
       email: json['email'] as String? ?? 'alex@example.com',
       bio: json['bio'] as String? ?? 'Optimizing time, building routines, and staying focused.',
-      avatarPreset: json['avatarPreset'] as String? ?? '🚀',
+      avatarPreset: json['avatarPreset'] as String? ?? '⚡',
       avatarColorValue: json['avatarColorValue'] as int? ?? 0xFF2563EB,
+      customImagePath: json['customImagePath'] as String?,
       timezone: json['timezone'] as String? ?? 'UTC+05:00 - Islamabad, Karachi',
       workHoursStartMinutes: json['workHoursStartMinutes'] as int? ?? 540,
       workHoursEndMinutes: json['workHoursEndMinutes'] as int? ?? 1080,
@@ -158,6 +167,7 @@ class UserProfile {
       bio: 'Mastering routines, optimizing deep work, and achieving daily goals.',
       avatarPreset: '⚡',
       avatarColorValue: 0xFF2563EB,
+      customImagePath: null,
       timezone: 'UTC+05:00 - Islamabad, Karachi',
       workHoursStartMinutes: 540, // 9:00 AM
       workHoursEndMinutes: 1080, // 6:00 PM
@@ -171,3 +181,4 @@ class UserProfile {
     );
   }
 }
+

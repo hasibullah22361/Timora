@@ -4,6 +4,9 @@ import 'package:timora/features/schedule/data/repositories/schedule_repository.d
 import 'package:timora/features/home/presentation/providers/home_provider.dart';
 import 'package:timora/features/routine/application/routine_scheduler_service.dart';
 import 'package:timora/features/notifications/application/notification_controller.dart';
+import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
+import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
+import 'package:timora/features/cloud_sync/services/sync_service.dart';
 
 final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
@@ -36,9 +39,6 @@ final scheduleActivitiesProvider = FutureProvider<List<ScheduleActivity>>((ref) 
     if (currentTime.isAfter(activity.startTime) && currentTime.isBefore(activity.endTime)) {
       return activity.copyWith(status: ActivityStatus.current);
     } else if (currentTime.isAfter(activity.endTime)) {
-      // If it's in the past and wasn't completed, mark as skipped or keep as upcoming? 
-      // Usually past uncompleted is skipped or missed. Let's just keep it as is for now or mark skipped.
-      // We will leave it as upcoming/missed, but UI will show it differently.
       return activity.copyWith(status: ActivityStatus.skipped);
     } else {
       return activity.copyWith(status: ActivityStatus.upcoming);
@@ -52,10 +52,22 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
 
   ScheduleNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
 
+  void _notifyRelated(DateTime date) {
+    _ref.invalidate(scheduleActivitiesProvider);
+    _ref.invalidate(dailyScheduleProvider);
+    _ref.invalidate(scheduleActivitiesByDateProvider(date));
+    _ref.read(syncServiceProvider).autoSync();
+  }
+
   Future<void> addActivity(ScheduleActivity activity) async {
     try {
       await _repo.addActivity(activity);
-      _ref.invalidate(scheduleActivitiesProvider);
+      await _ref.read(syncRepositoryProvider).enqueueChange(
+        entityType: 'schedule_activities',
+        entityId: activity.id,
+        operation: SyncOperation.create,
+      );
+      _notifyRelated(activity.date);
     } catch (e) {
       rethrow;
     }
@@ -63,39 +75,64 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<void> updateActivity(ScheduleActivity activity) async {
     await _repo.updateActivity(activity);
-    _ref.invalidate(scheduleActivitiesProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'schedule_activities',
+      entityId: activity.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(activity.date);
   }
 
-  Future<void> deleteActivity(String id) async {
+  Future<void> deleteActivity(String id, [DateTime? date]) async {
     await _repo.deleteActivity(id);
     final notifController = _ref.read(notificationControllerProvider);
     await notifController.cancelAllForActivity(id);
-    _ref.invalidate(scheduleActivitiesProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'schedule_activities',
+      entityId: id,
+      operation: SyncOperation.delete,
+    );
+    _notifyRelated(date ?? DateTime.now());
   }
 
   Future<void> markCompleted(ScheduleActivity activity) async {
-    await _repo.updateActivity(activity.copyWith(
+    final updated = activity.copyWith(
       status: ActivityStatus.completed,
       completedAt: DateTime.now(),
-      isOverridden: true, // marking completed manually implies overriding the routine block logic
-    ));
-    _ref.invalidate(scheduleActivitiesProvider);
+      isOverridden: true,
+    );
+    await _repo.updateActivity(updated);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'schedule_activities',
+      entityId: activity.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(activity.date);
   }
 
   Future<void> markSkipped(ScheduleActivity activity) async {
-    await _repo.updateActivity(activity.copyWith(
+    final updated = activity.copyWith(
       status: ActivityStatus.skipped,
       isOverridden: true,
-    ));
-    _ref.invalidate(scheduleActivitiesProvider);
+    );
+    await _repo.updateActivity(updated);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'schedule_activities',
+      entityId: activity.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(activity.date);
   }
 
   Future<void> resetToRoutine(ScheduleActivity activity) async {
-    // We revert the override by fetching the routine block it came from, 
-    // or simply marking it as not overridden, but realistically resetting implies getting original values back.
-    // For now, if we reset, we just toggle isOverridden. Real logic would pull the original block times.
-    await _repo.updateActivity(activity.copyWith(isOverridden: false));
-    _ref.invalidate(scheduleActivitiesProvider);
+    final updated = activity.copyWith(isOverridden: false);
+    await _repo.updateActivity(updated);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'schedule_activities',
+      entityId: activity.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(activity.date);
   }
 }
 

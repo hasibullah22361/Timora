@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../activity_library.dart';
 import '../models/activity_definition.dart';
 
 final customActivityRepositoryProvider = Provider<CustomActivityRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return CustomActivityRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return CustomActivityRepository(prefs, userId: currentUser?.id);
 });
 
 final allActivitiesProvider = StateNotifierProvider<AllActivitiesNotifier, List<ActivityDefinition>>((ref) {
@@ -23,13 +25,26 @@ final recentActivitiesProvider = Provider<List<ActivityDefinition>>((ref) {
 });
 
 class CustomActivityRepository {
-  static const String _customKey = 'timora_custom_activities_list';
-  static const String _favoritesKey = 'timora_favorite_activity_ids';
-  static const String _recentKey = 'timora_recent_activity_ids';
+  static const String _defaultCustomKey = 'timora_custom_activities_list';
+  static const String _defaultFavoritesKey = 'timora_favorite_activity_ids';
+  static const String _defaultRecentKey = 'timora_recent_activity_ids';
 
   final SharedPreferences _prefs;
+  final String? _userId;
 
-  CustomActivityRepository(this._prefs);
+  CustomActivityRepository(this._prefs, {String? userId}) : _userId = userId;
+
+  String get _customKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_custom_activities_${_userId}_list'
+      : _defaultCustomKey;
+
+  String get _favoritesKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_favorite_activity_${_userId}_ids'
+      : _defaultFavoritesKey;
+
+  String get _recentKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_recent_activity_${_userId}_ids'
+      : _defaultRecentKey;
 
   List<ActivityDefinition> getCustomActivities() {
     final jsonStr = _prefs.getString(_customKey);

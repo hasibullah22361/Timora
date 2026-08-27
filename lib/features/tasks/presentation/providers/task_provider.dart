@@ -3,6 +3,12 @@ import 'package:timora/features/tasks/data/models/task_model.dart';
 import 'package:timora/features/tasks/data/models/subtask_model.dart';
 import 'package:timora/features/tasks/data/repositories/task_repository.dart';
 import '../../../notifications/application/notification_service.dart';
+import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
+import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
+import 'package:timora/features/cloud_sync/services/sync_service.dart';
+import 'package:timora/features/home/presentation/providers/home_provider.dart';
+import 'package:timora/features/goals/presentation/providers/goal_provider.dart';
+import 'package:timora/features/projects/presentation/providers/project_provider.dart';
 
 final taskSearchQueryProvider = StateProvider<String>((ref) => '');
 
@@ -97,16 +103,40 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  void _notifyRelated(TaskModel task) {
+    _ref.invalidate(allTasksProvider);
+    _ref.invalidate(dailyScheduleProvider);
+    if (task.goalId != null && task.goalId!.isNotEmpty) {
+      _ref.invalidate(allGoalsProvider);
+      _ref.invalidate(goalProgressProvider(task.goalId!));
+    }
+    if (task.projectId != null && task.projectId!.isNotEmpty) {
+      _ref.invalidate(allProjectsProvider);
+      _ref.invalidate(projectProgressProvider(task.projectId!));
+    }
+    _ref.read(syncServiceProvider).autoSync();
+  }
+
   Future<void> createTask(TaskModel task) async {
     await _repo.createTask(task);
     _syncNotification(task);
-    _ref.invalidate(allTasksProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'tasks',
+      entityId: task.id,
+      operation: SyncOperation.create,
+    );
+    _notifyRelated(task);
   }
 
   Future<void> updateTask(TaskModel task) async {
     await _repo.updateTask(task);
     _syncNotification(task);
-    _ref.invalidate(allTasksProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'tasks',
+      entityId: task.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(task);
   }
 
   Future<void> completeTask(TaskModel task) async {
@@ -116,7 +146,12 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
     );
     await _repo.updateTask(completed);
     _syncNotification(completed); // will cancel
-    _ref.invalidate(allTasksProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'tasks',
+      entityId: task.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(completed);
   }
 
   Future<void> undoCompleteTask(TaskModel task) async {
@@ -126,35 +161,71 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
     );
     await _repo.updateTask(pending);
     _syncNotification(pending); // will reschedule if it has future reminders
-    _ref.invalidate(allTasksProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'tasks',
+      entityId: task.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(pending);
   }
 
   Future<void> softDeleteTask(TaskModel task) async {
     await _repo.deleteTask(task.id);
     _syncNotification(task.copyWith(isDeleted: true)); // cancels
-    _ref.invalidate(allTasksProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'tasks',
+      entityId: task.id,
+      operation: SyncOperation.delete,
+    );
+    _notifyRelated(task);
   }
   
   Future<void> restoreTask(TaskModel task) async {
     await _repo.restoreTask(task.id);
     _syncNotification(task.copyWith(isDeleted: false)); // reschedules
-    _ref.invalidate(allTasksProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'tasks',
+      entityId: task.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(task);
   }
 
   // Subtasks
   Future<void> createSubtask(SubtaskModel subtask) async {
     await _repo.createSubtask(subtask);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'subtasks',
+      entityId: subtask.id,
+      operation: SyncOperation.create,
+    );
     _ref.invalidate(subtasksProvider(subtask.taskId));
+    _ref.invalidate(allTasksProvider);
+    _ref.read(syncServiceProvider).autoSync();
   }
 
   Future<void> updateSubtask(SubtaskModel subtask) async {
     await _repo.updateSubtask(subtask);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'subtasks',
+      entityId: subtask.id,
+      operation: SyncOperation.update,
+    );
     _ref.invalidate(subtasksProvider(subtask.taskId));
+    _ref.invalidate(allTasksProvider);
+    _ref.read(syncServiceProvider).autoSync();
   }
 
   Future<void> deleteSubtask(String id, String taskId) async {
     await _repo.deleteSubtask(id);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'subtasks',
+      entityId: id,
+      operation: SyncOperation.delete,
+    );
     _ref.invalidate(subtasksProvider(taskId));
+    _ref.invalidate(allTasksProvider);
+    _ref.read(syncServiceProvider).autoSync();
   }
 }
 

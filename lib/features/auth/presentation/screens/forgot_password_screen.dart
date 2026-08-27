@@ -15,11 +15,28 @@ class ForgotPasswordScreen extends ConsumerStatefulWidget {
 class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
   bool _success = false;
+  String? _localValidationError;
+
+  static final RegExp _emailRegExp = RegExp(
+    r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+  );
 
   void _resetPassword() async {
-    final success = await ref.read(authControllerProvider.notifier).resetPassword(
-      _emailController.text.trim(),
-    );
+    FocusScope.of(context).unfocus();
+
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _localValidationError = 'Please enter your email address.');
+      return;
+    }
+    if (!_emailRegExp.hasMatch(email)) {
+      setState(() => _localValidationError = 'Please enter a valid email address.');
+      return;
+    }
+
+    setState(() => _localValidationError = null);
+
+    final success = await ref.read(authControllerProvider.notifier).resetPassword(email);
     if (success && mounted) {
       setState(() {
         _success = true;
@@ -37,6 +54,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = ref.watch(authControllerProvider);
+    final displayedError = _localValidationError ?? authState.errorMessage;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -69,14 +87,23 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               const SizedBox(height: 32),
               if (_success) ...[
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                   ),
-                  child: const Text(
-                    'If an account exists, a reset link has been sent.',
-                    style: TextStyle(color: Colors.green),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline, color: Colors.green, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'If an account exists for ${_emailController.text.trim()}, instructions have been sent.',
+                          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -85,16 +112,25 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ] else ...[
-                if (authState.hasError) ...[
+                if (displayedError != null) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                     ),
-                    child: Text(
-                      authState.error.toString(),
-                      style: const TextStyle(color: Colors.red),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            displayedError,
+                            style: const TextStyle(color: Colors.red, fontSize: 13),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -104,12 +140,17 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                   hint: 'Enter your email',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  onChanged: (_) {
+                    if (_localValidationError != null) {
+                      setState(() => _localValidationError = null);
+                    }
+                  },
                 ),
                 const SizedBox(height: 32),
                 PrimaryButton(
                   text: 'Send Reset Link',
                   isLoading: authState.isLoading,
-                  onPressed: _resetPassword,
+                  onPressed: authState.isLoading ? null : _resetPassword,
                 ),
               ],
             ],

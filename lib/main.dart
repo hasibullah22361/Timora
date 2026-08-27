@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 import 'core/providers/shared_prefs_provider.dart';
@@ -12,6 +13,16 @@ import 'features/splash/presentation/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase
+  try {
+    await Supabase.initialize(
+      url: 'https://zwrlfslghwkjhuzcujsw.supabase.co',
+      anonKey: 'YOUR_PUBLISHABLE_KEY',
+    );
+  } catch (e) {
+    debugPrint('Supabase initialization notice: $e');
+  }
 
   // Initialize timezone data
   tz.initializeTimeZones();
@@ -53,4 +64,3 @@ class TimoraApp extends ConsumerWidget {
     );
   }
 }
-

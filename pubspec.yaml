@@ -21,9 +21,13 @@ dependencies:
   fl_chart: ^1.2.0
 
   file_picker: ^12.1.0
+  image_picker: ^1.1.2
+  flutter_tts: ^4.2.0
   share_plus: ^13.3.0
   path_provider: ^2.1.2
   uuid: ^4.4.0
+  crypto: ^3.0.3
+  supabase_flutter: ^2.17.2
 
 dev_dependencies:
   flutter_test:
@@ -34,3 +38,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
+

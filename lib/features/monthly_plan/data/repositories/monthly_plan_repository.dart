@@ -3,22 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/monthly_plan_model.dart';
 
 final monthlyPlanRepositoryProvider = Provider<MonthlyPlanRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return MonthlyPlanRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return MonthlyPlanRepository(prefs, userId: currentUser?.id);
 });
 
 class MonthlyPlanRepository {
-  static const String _storageKey = 'timora_monthly_plans_data';
+  static const String _defaultStorageKey = 'timora_monthly_plans_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<MonthlyPlanModel> _plans = [];
 
-  MonthlyPlanRepository(this._prefs) {
+  MonthlyPlanRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _storageKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_monthly_plans_${_userId}_data'
+      : _defaultStorageKey;
 
   void _loadFromStorage() {
     final jsonString = _prefs.getString(_storageKey);

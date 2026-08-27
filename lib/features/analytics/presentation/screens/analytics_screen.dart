@@ -229,9 +229,18 @@ class _FocusTrendChart extends ConsumerWidget {
                 data: (stats) {
                   if (stats.dailyTrends.isEmpty || stats.totalSeconds == 0) {
                     return Center(
-                        child: Text('Not enough data yet.',
-                            style: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant)));
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.insights, size: 36, color: Colors.grey),
+                          const SizedBox(height: 8),
+                          const Text('No productivity data yet.', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('Complete activities and focus sessions to see trends.',
+                              style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+                        ],
+                      ),
+                    );
                   }
 
                   final maxSecs =
@@ -239,9 +248,18 @@ class _FocusTrendChart extends ConsumerWidget {
                   final maxY = (maxSecs / 3600).ceilToDouble(); // Hours
                   if (maxY == 0) {
                     return Center(
-                        child: Text('Not enough data yet.',
-                            style: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant)));
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.insights, size: 36, color: Colors.grey),
+                          const SizedBox(height: 8),
+                          const Text('No productivity data yet.', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('Complete activities and focus sessions to see trends.',
+                              style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+                        ],
+                      ),
+                    );
                   }
 
                   final barGroups = <BarChartGroupData>[];

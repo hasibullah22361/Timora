@@ -4,8 +4,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/cloud_models.dart';
 import '../../data/providers/mock_supabase_provider.dart';
 import '../../services/sync_service.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
-final currentUserProvider = StateProvider<CloudAccount?>((ref) => null);
+final cloudAccountProvider = StateProvider<CloudAccount?>((ref) {
+  final authUser = ref.watch(currentUserProvider);
+  if (authUser != null) {
+    return CloudAccount(
+      userId: authUser.id,
+      email: authUser.email,
+      displayName: authUser.name,
+      createdAt: authUser.createdAt,
+      syncEnabled: true,
+      backupEnabled: true,
+    );
+  }
+  return null;
+});
 
 class CloudAccountScreen extends ConsumerStatefulWidget {
   const CloudAccountScreen({super.key});
@@ -19,6 +33,15 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
+  @override
+  void initState() {
+    super.initState();
+    final currentAccount = ref.read(cloudAccountProvider);
+    if (currentAccount != null) {
+      ref.read(mockSupabaseProvider).setCurrentUser(currentAccount);
+    }
+  }
+
   void _handleSignIn() async {
     setState(() => _isLoading = true);
     try {
@@ -27,9 +50,10 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
         _emailController.text,
         _passwordController.text,
       );
-      ref.read(currentUserProvider.notifier).state = account;
+      ref.read(cloudAccountProvider.notifier).state = account;
+      provider.setCurrentUser(account);
       // Start initial sync
-      ref.read(syncServiceProvider).syncNow();
+      await ref.read(syncServiceProvider).syncNow();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign In Failed: $e'), backgroundColor: Colors.red));
@@ -40,7 +64,6 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
   }
 
   void _handleSignOut() async {
-    // Show warning
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -59,14 +82,14 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
     if (confirm == true) {
       final provider = ref.read(mockSupabaseProvider);
       await provider.signOut();
-      ref.read(currentUserProvider.notifier).state = null;
+      ref.read(cloudAccountProvider.notifier).state = null;
       ref.read(globalSyncStatusProvider.notifier).state = SyncStatus.offline;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final account = ref.watch(currentUserProvider);
+    final account = ref.watch(cloudAccountProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Cloud Account')),
@@ -127,8 +150,12 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
           subtitle: const Text('Upload and download changes automatically'),
           value: account.syncEnabled,
           onChanged: (val) {
-            // Update local state in a real app
-            ref.read(currentUserProvider.notifier).state = account.copyWith(syncEnabled: val);
+            final updated = account.copyWith(syncEnabled: val);
+            ref.read(cloudAccountProvider.notifier).state = updated;
+            ref.read(mockSupabaseProvider).setCurrentUser(updated);
+            if (val) {
+              ref.read(syncServiceProvider).syncNow();
+            }
           },
         ),
         ListTile(

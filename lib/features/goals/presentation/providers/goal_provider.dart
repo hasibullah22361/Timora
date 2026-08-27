@@ -3,6 +3,9 @@ import 'package:timora/features/goals/data/models/goal_model.dart';
 import 'package:timora/features/goals/data/models/milestone_model.dart';
 import 'package:timora/features/goals/data/repositories/goal_repository.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
+import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
+import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
+import 'package:timora/features/cloud_sync/services/sync_service.dart';
 
 final allGoalsProvider = FutureProvider<List<GoalModel>>((ref) async {
   final repo = ref.watch(goalRepositoryProvider);
@@ -72,70 +75,118 @@ class GoalNotifier extends StateNotifier<AsyncValue<void>> {
 
   GoalNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
 
+  void _notifyRelated(String goalId) {
+    _ref.invalidate(allGoalsProvider);
+    _ref.invalidate(goalDetailsProvider(goalId));
+    _ref.invalidate(milestonesProvider(goalId));
+    _ref.invalidate(goalProgressProvider(goalId));
+    _ref.read(syncServiceProvider).autoSync();
+  }
+
   Future<void> createGoal(GoalModel goal) async {
     await _repo.createGoal(goal);
-    _ref.invalidate(allGoalsProvider);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'goals',
+      entityId: goal.id,
+      operation: SyncOperation.create,
+    );
+    _notifyRelated(goal.id);
   }
 
   Future<void> updateGoal(GoalModel goal) async {
     await _repo.updateGoal(goal);
-    _ref.invalidate(allGoalsProvider);
-    _ref.invalidate(goalDetailsProvider(goal.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'goals',
+      entityId: goal.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(goal.id);
   }
 
   Future<void> deleteGoal(String id) async {
     await _repo.deleteGoal(id);
-    _ref.invalidate(allGoalsProvider);
-    _ref.invalidate(goalDetailsProvider(id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'goals',
+      entityId: id,
+      operation: SyncOperation.delete,
+    );
+    _notifyRelated(id);
   }
   
   Future<void> pauseGoal(GoalModel goal) async {
     await _repo.updateGoal(goal.copyWith(status: GoalStatus.paused));
-    _ref.invalidate(allGoalsProvider);
-    _ref.invalidate(goalDetailsProvider(goal.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'goals',
+      entityId: goal.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(goal.id);
   }
   
   Future<void> completeGoal(GoalModel goal) async {
     await _repo.updateGoal(goal.copyWith(status: GoalStatus.completed, completedAt: DateTime.now()));
-    _ref.invalidate(allGoalsProvider);
-    _ref.invalidate(goalDetailsProvider(goal.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'goals',
+      entityId: goal.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(goal.id);
   }
   
   Future<void> resumeGoal(GoalModel goal) async {
     await _repo.updateGoal(goal.copyWith(status: GoalStatus.active, completedAt: null));
-    _ref.invalidate(allGoalsProvider);
-    _ref.invalidate(goalDetailsProvider(goal.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'goals',
+      entityId: goal.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(goal.id);
   }
   
   Future<void> archiveGoal(GoalModel goal) async {
     await _repo.updateGoal(goal.copyWith(status: GoalStatus.archived));
-    _ref.invalidate(allGoalsProvider);
-    _ref.invalidate(goalDetailsProvider(goal.id));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'goals',
+      entityId: goal.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(goal.id);
   }
 
   // Milestones
   Future<void> createMilestone(MilestoneModel milestone) async {
     await _repo.createMilestone(milestone);
-    _ref.invalidate(milestonesProvider(milestone.goalId));
-    _ref.invalidate(goalProgressProvider(milestone.goalId));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'milestones',
+      entityId: milestone.id,
+      operation: SyncOperation.create,
+    );
+    _notifyRelated(milestone.goalId);
   }
 
   Future<void> updateMilestone(MilestoneModel milestone) async {
     await _repo.updateMilestone(milestone);
-    _ref.invalidate(milestonesProvider(milestone.goalId));
-    _ref.invalidate(goalProgressProvider(milestone.goalId));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'milestones',
+      entityId: milestone.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(milestone.goalId);
   }
 
   Future<void> deleteMilestone(String id, String goalId) async {
     await _repo.deleteMilestone(id);
-    _ref.invalidate(milestonesProvider(goalId));
-    _ref.invalidate(goalProgressProvider(goalId));
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'milestones',
+      entityId: id,
+      operation: SyncOperation.delete,
+    );
+    _notifyRelated(goalId);
   }
 
   Future<void> reorderMilestones(String goalId, List<MilestoneModel> ordered) async {
-    // Optimistic update
     await _repo.reorderMilestones(goalId, ordered);
-    _ref.invalidate(milestonesProvider(goalId));
+    _notifyRelated(goalId);
   }
 }
 

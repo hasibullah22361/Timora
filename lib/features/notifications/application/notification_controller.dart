@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'notification_service.dart';
+import 'voice_announcement_service.dart';
 import '../../settings/data/repositories/notification_settings_repository.dart';
 import '../../schedule/data/models/schedule_activity.dart';
 import '../../schedule/data/repositories/schedule_repository.dart';
@@ -10,6 +12,7 @@ final notificationControllerProvider = Provider<NotificationController>((ref) {
     ref.watch(notificationServiceProvider),
     ref.watch(notificationSettingsRepositoryProvider),
     ref.watch(scheduleRepositoryProvider),
+    ref.watch(voiceAnnouncementServiceProvider),
   );
 });
 
@@ -17,8 +20,35 @@ class NotificationController {
   final NotificationService _service;
   final NotificationSettingsRepository _settings;
   final ScheduleRepository _scheduleRepo;
+  final VoiceAnnouncementService _voiceService;
 
-  NotificationController(this._service, this._settings, this._scheduleRepo);
+  NotificationController(
+    this._service,
+    this._settings,
+    this._scheduleRepo,
+    this._voiceService,
+  ) {
+    _service.onNotificationResponse = _handleNotificationResponse;
+  }
+
+  void _handleNotificationResponse(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final data = jsonDecode(payload) as Map<String, dynamic>;
+      final activityId = data['activityId'] as String?;
+      final title = data['title'] as String?;
+      final startTimeStr = data['startTime'] as String?;
+      final startTime = startTimeStr != null ? DateTime.tryParse(startTimeStr) : null;
+
+      if (activityId != null && title != null) {
+        _voiceService.announceActivityStart(
+          activityId: activityId,
+          activityName: title,
+          scheduledTime: startTime,
+        );
+      }
+    } catch (_) {}
+  }
 
   /// Deterministic ID generator to ensure updating an activity overwrites existing notifications instead of duplicating.
   int _generateId(String stringId, String type) {
@@ -52,12 +82,14 @@ class NotificationController {
 
   Future<void> syncScheduleNotifications(DateTime date) async {
     if (!_settings.notificationsEnabled) {
-      await _service.cancelAllNotifications(); // Brute force safety if toggled off completely
+      await _service.cancelAllNotifications();
       return;
     }
 
     final activities = await _scheduleRepo.getActivitiesForDate(date);
     final timeFormat = DateFormat('h:mm a');
+    final playSound = _settings.soundEnabled;
+    final enableVibration = _settings.vibrationEnabled;
     
     for (int i = 0; i < activities.length; i++) {
       final act = activities[i];
@@ -74,6 +106,12 @@ class NotificationController {
         continue;
       }
 
+      final payloadJson = jsonEncode({
+        'activityId': act.id,
+        'title': act.title,
+        'startTime': act.startTime.toIso8601String(),
+      });
+
       // 3. Activity Starting Reminder
       if (_settings.activityStartingEnabled) {
         final reminderTime = act.startTime.subtract(Duration(minutes: _settings.defaultReminderMinutes));
@@ -83,6 +121,9 @@ class NotificationController {
             'Timora • Up Next',
             '${act.title} starts in ${_settings.defaultReminderMinutes} minutes.',
             reminderTime,
+            payload: payloadJson,
+            playSound: playSound,
+            enableVibration: enableVibration,
           );
         }
       }
@@ -95,6 +136,9 @@ class NotificationController {
             'Timora • Focus Time',
             '${act.title} time. Let\'s get started.',
             act.startTime,
+            payload: payloadJson,
+            playSound: playSound,
+            enableVibration: enableVibration,
           );
         }
       }
@@ -108,6 +152,9 @@ class NotificationController {
             'Timora • Wrapping Up',
             '${act.title} ends in ${_settings.defaultReminderMinutes} minutes.',
             endRemindTime,
+            payload: payloadJson,
+            playSound: playSound,
+            enableVibration: enableVibration,
           );
         }
       }
@@ -120,10 +167,12 @@ class NotificationController {
             'Timora • Up Next',
             'Next: ${nextAct.title} starts at ${timeFormat.format(nextAct.startTime)}.',
             act.endTime,
+            payload: payloadJson,
+            playSound: playSound,
+            enableVibration: enableVibration,
           );
         }
       }
     }
   }
 }
-

@@ -3,22 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/weekly_plan_model.dart';
 
 final weeklyPlanRepositoryProvider = Provider<WeeklyPlanRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return WeeklyPlanRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return WeeklyPlanRepository(prefs, userId: currentUser?.id);
 });
 
 class WeeklyPlanRepository {
-  static const String _storageKey = 'timora_weekly_plans_data';
+  static const String _defaultStorageKey = 'timora_weekly_plans_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<WeeklyPlanModel> _plans = [];
 
-  WeeklyPlanRepository(this._prefs) {
+  WeeklyPlanRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _storageKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_weekly_plans_${_userId}_data'
+      : _defaultStorageKey;
 
   void _loadFromStorage() {
     final jsonString = _prefs.getString(_storageKey);

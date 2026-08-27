@@ -81,4 +81,7 @@ class NotificationSettingsRepository {
 
   bool get vibrationEnabled => _prefs.getBool('vibrationEnabled') ?? true;
   Future<void> setVibrationEnabled(bool value) => _prefs.setBool('vibrationEnabled', value);
+
+  bool get spokenAnnouncementsEnabled => _prefs.getBool('spokenAnnouncementsEnabled') ?? true;
+  Future<void> setSpokenAnnouncementsEnabled(bool value) => _prefs.setBool('spokenAnnouncementsEnabled', value);
 }

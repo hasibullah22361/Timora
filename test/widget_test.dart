@@ -7,8 +7,8 @@ import 'package:timora/features/settings/data/repositories/notification_settings
 import 'package:timora/features/schedule/data/activity_library.dart';
 import 'package:timora/features/schedule/data/models/activity_definition.dart';
 import 'package:timora/features/schedule/data/repositories/custom_activity_repository.dart';
-import 'package:timora/features/profile/data/models/user_profile.dart';
 import 'package:timora/features/profile/data/repositories/user_profile_repository.dart';
+import 'package:timora/features/notifications/application/voice_announcement_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +41,7 @@ void main() {
       username: 'hasibt',
       dailyGoalHours: 8.0,
       bio: 'New bio test',
+      customImagePath: '/data/user/0/com.example.timora/app_flutter/avatar.jpg',
     );
     await repo.saveProfile(updated);
 
@@ -49,6 +50,34 @@ void main() {
     expect(loaded.username, 'hasibt');
     expect(loaded.dailyGoalHours, 8.0);
     expect(loaded.bio, 'New bio test');
+    expect(loaded.hasCustomImage, isTrue);
+    expect(loaded.customImagePath, '/data/user/0/com.example.timora/app_flutter/avatar.jpg');
+  });
+
+  test('VoiceAnnouncementService builds dynamic speech phrases correctly', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final repo = NotificationSettingsRepository(prefs);
+    final voiceService = VoiceAnnouncementService(repo);
+
+    expect(voiceService.buildAnnouncementPhrase('Breakfast'), 'Your breakfast time starts now.');
+    expect(voiceService.buildAnnouncementPhrase('Gym'), 'Your gym time starts now.');
+    expect(voiceService.buildAnnouncementPhrase('Work'), 'Your work time starts now.');
+    expect(voiceService.buildAnnouncementPhrase('Prayer'), 'Your prayer time starts now.');
+    expect(voiceService.buildAnnouncementPhrase('Study'), 'Your study time starts now.');
+    expect(voiceService.buildAnnouncementPhrase('Meeting'), 'Your meeting time starts now.');
+    expect(voiceService.buildAnnouncementPhrase('Deep Work'), 'Your deep work time starts now.');
+    expect(voiceService.buildAnnouncementPhrase('Focus Time'), 'Your focus time starts now.');
+  });
+
+  test('NotificationSettingsRepository manages voice announcement toggle', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final repo = NotificationSettingsRepository(prefs);
+
+    expect(repo.spokenAnnouncementsEnabled, isTrue);
+    await repo.setSpokenAnnouncementsEnabled(false);
+    expect(repo.spokenAnnouncementsEnabled, isFalse);
   });
 
   test('CustomActivityRepository tracks custom activities and favorites', () async {

@@ -64,7 +64,35 @@ class GoalsScreen extends ConsumerWidget {
     return asyncGoals.when(
       data: (goals) {
         if (goals.isEmpty) {
-          return Center(child: Text(emptyMsg, style: const TextStyle(color: Colors.grey)));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.flag_outlined, size: 48, color: Color(0xFF10B981)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No goals yet.',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Set a goal and start making progress.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         return ListView.builder(
           padding: const EdgeInsets.only(top: 16, bottom: 100),

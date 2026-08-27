@@ -16,28 +16,72 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
 
+  final List<String> _promptSuggestions = [
+    'Plan my day',
+    'Help me organize today',
+    'Plan tomorrow',
+    'Create a weekly plan',
+    'Help me complete my goals',
+    'Improve my schedule',
+    'What should I focus on now?',
+  ];
+
   void _sendMessage(String text) async {
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || _isLoading) return;
     _controller.clear();
     
     setState(() => _isLoading = true);
-    // Auto-scroll
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    _scrollToBottom();
 
     await ref.read(aiMessagesProvider.notifier).sendMessage(text);
     
-    if (mounted) setState(() => _isLoading = false);
-    _scrollToBottom();
+    if (mounted) {
+      setState(() => _isLoading = false);
+      _scrollToBottom();
+    }
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent + 200,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent + 200,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _confirmClearHistory() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Conversation'),
+        content: const Text('Are you sure you want to clear your current AI chat history?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              ref.read(aiMessagesProvider.notifier).clearHistory();
+              Navigator.pop(ctx);
+            },
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -46,53 +90,110 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('AI Assistant'),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFFDB2777)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
+            ),
+            const SizedBox(width: 10),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Timora AI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text('Productivity Assistant', style: TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
+          ],
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.cleaning_services),
-            onPressed: () => ref.read(aiMessagesProvider.notifier).clearHistory(),
-          )
+          if (messages.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Clear Chat',
+              onPressed: _confirmClearHistory,
+            ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: messages.isEmpty
-                ? _buildEmptyState(theme)
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      return _buildMessage(messages[index], theme);
-                    },
-                  ),
-          ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Quick suggestions chips banner when messages exist
+            if (messages.isNotEmpty)
+              Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _promptSuggestions.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final prompt = _promptSuggestions[index];
+                    return ActionChip(
+                      label: Text(prompt, style: const TextStyle(fontSize: 12)),
+                      onPressed: () => _sendMessage(prompt),
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    );
+                  },
+                ),
+              ),
+
+            Expanded(
+              child: messages.isEmpty
+                  ? _buildEmptyState(theme)
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        return _buildMessage(messages[index], theme);
+                      },
+                    ),
             ),
-          _buildInputArea(theme),
-        ],
+
+            if (_isLoading)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary),
+                          ),
+                          const SizedBox(width: 10),
+                          Text('Timora AI is thinking...', style: theme.textTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            _buildInputArea(theme),
+          ],
+        ),
       ),
     );
   }
-
-  final List<String> _promptSuggestions = [
-    'Plan my day',
-    'Create a routine',
-    'Break a goal into tasks',
-    'Help me prioritize',
-    'Reschedule my day',
-    'Analyze my productivity',
-    'Suggest a better schedule',
-    'Create tomorrow\'s plan',
-    'Create weekly plan',
-    'Suggest breaks',
-    'Ask anything about my routine',
-  ];
 
   Widget _buildEmptyState(ThemeData theme) {
     return Center(
@@ -104,16 +205,14 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
+                shape: BoxShape.circle,
                 gradient: const LinearGradient(
                   colors: [Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFFDB2777)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
                 ),
-                shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
-                    blurRadius: 16,
+                    blurRadius: 20,
                     offset: const Offset(0, 6),
                   ),
                 ],
@@ -122,18 +221,15 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              'TIMORA AI',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
               'How can I help you today?',
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Ask me to plan your day, optimize your routine, break down goals, or prioritize tasks.',
+              textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 28),
@@ -141,8 +237,16 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
               spacing: 8,
               runSpacing: 10,
               alignment: WrapAlignment.center,
-              children: _promptSuggestions.map((label) {
-                return _buildSuggestionChip(label, theme);
+              children: _promptSuggestions.map((prompt) {
+                return OutlinedButton.icon(
+                  icon: const Icon(Icons.lightbulb_outline, size: 14),
+                  label: Text(prompt, style: const TextStyle(fontSize: 13)),
+                  onPressed: () => _sendMessage(prompt),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                );
               }).toList(),
             ),
           ],
@@ -151,105 +255,118 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     );
   }
 
-  Widget _buildSuggestionChip(String label, ThemeData theme) {
-    return ActionChip(
-      avatar: const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF7C3AED)),
-      label: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-      backgroundColor: theme.colorScheme.surface,
-      side: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.7)),
-      onPressed: () => _sendMessage(label),
-    );
-  }
-
   Widget _buildMessage(AIMessage msg, ThemeData theme) {
     final isUser = msg.role == AIMessageRole.user;
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isUser ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16).copyWith(
-              bottomRight: isUser ? const Radius.circular(0) : const Radius.circular(16),
-              bottomLeft: !isUser ? const Radius.circular(0) : const Radius.circular(16),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                msg.content,
-                style: TextStyle(color: isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant),
-              ),
-              if (msg.actionPayload != null) ...[
-                const SizedBox(height: 16),
-                _buildActionPreview(msg.actionPayload!, theme),
-              ]
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildActionPreview(AIActionPayload payload, ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.auto_awesome, size: 16, color: Colors.deepPurple),
-              const SizedBox(width: 8),
-              const Text('AI Proposed Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              const Spacer(),
-              Text('Confidence: ${payload.confidence}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            ],
-          ),
-          const Divider(),
-          Text(payload.summary, style: const TextStyle(fontSize: 12)),
-          const SizedBox(height: 8),
-          ...payload.actions.map((a) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
-            child: Row(
-              children: [
-                const Icon(Icons.add_circle_outline, size: 14, color: Colors.green),
-                const SizedBox(width: 8),
-                Expanded(child: Text('${a.type.name}: ${a.data['title']}', style: const TextStyle(fontSize: 12))),
-              ],
+          if (!isUser) ...[
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                ),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
             ),
-          )),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('AI Actions Cancelled')));
-                },
-                child: const Text('Cancel'),
+            const SizedBox(width: 10),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isUser
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(18),
+                  topRight: const Radius.circular(18),
+                  bottomLeft: Radius.circular(isUser ? 18 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 18),
+                ),
+                border: isUser
+                    ? null
+                    : Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
               ),
-              FilledButton(
-                onPressed: () async {
-                  await ref.read(aiActionServiceProvider).applyActions(payload.actions);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Plan Applied!')));
-                  }
-                },
-                child: const Text('Apply'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    msg.content,
+                    style: TextStyle(
+                      color: isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
+                      fontSize: 14.5,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (msg.actionPayload != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.check_circle_outline, size: 16, color: theme.colorScheme.primary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  msg.actionPayload!.summary,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              icon: const Icon(Icons.playlist_add_check, size: 16),
+                              label: const Text('Apply to Tasks & Schedule'),
+                              onPressed: () async {
+                                await ref.read(aiActionServiceProvider).applyActions(msg.actionPayload!.actions);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Plan applied successfully to Tasks!'),
+                                      backgroundColor: Color(0xFF10B981),
+                                    ),
+                                  );
+                                }
+                              },
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          )
+            ),
+          ),
+          if (isUser) const SizedBox(width: 8),
         ],
       ),
     );
@@ -257,34 +374,37 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
 
   Widget _buildInputArea(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8).copyWith(bottom: MediaQuery.of(context).padding.bottom + 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+        ),
       ),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: _controller,
+              textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
-                hintText: 'Ask Timora AI...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                hintText: 'Ask Timora anything...',
+                contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 filled: true,
-                fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
               ),
               onSubmitted: _sendMessage,
             ),
           ),
           const SizedBox(width: 8),
-          CircleAvatar(
-            backgroundColor: theme.colorScheme.primary,
-            child: IconButton(
-              icon: Icon(Icons.send, color: theme.colorScheme.onPrimary),
-              onPressed: () => _sendMessage(_controller.text),
-            ),
-          )
+          IconButton.filled(
+            onPressed: () => _sendMessage(_controller.text),
+            icon: const Icon(Icons.send_rounded),
+          ),
         ],
       ),
     );

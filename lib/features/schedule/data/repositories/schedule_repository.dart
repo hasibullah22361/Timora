@@ -3,22 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/schedule_activity.dart';
 
 final scheduleRepositoryProvider = Provider<ScheduleRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return ScheduleRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return ScheduleRepository(prefs, userId: currentUser?.id);
 });
 
 class ScheduleRepository {
-  static const String _storageKey = 'timora_schedule_activities_data';
+  static const String _defaultStorageKey = 'timora_schedule_activities_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<ScheduleActivity> _activities = [];
 
-  ScheduleRepository(this._prefs) {
+  ScheduleRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _storageKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_schedule_activities_${_userId}_data'
+      : _defaultStorageKey;
 
   void _loadFromStorage() {
     final jsonString = _prefs.getString(_storageKey);

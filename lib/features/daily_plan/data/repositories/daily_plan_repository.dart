@@ -3,25 +3,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/daily_plan_model.dart';
 import '../models/planned_task_block_model.dart';
 
 final dailyPlanRepositoryProvider = Provider<DailyPlanRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return DailyPlanRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return DailyPlanRepository(prefs, userId: currentUser?.id);
 });
 
 class DailyPlanRepository {
-  static const String _plansKey = 'timora_daily_plans_data';
-  static const String _blocksKey = 'timora_planned_blocks_data';
+  static const String _defaultPlansKey = 'timora_daily_plans_data';
+  static const String _defaultBlocksKey = 'timora_planned_blocks_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<DailyPlanModel> _plans = [];
   final List<PlannedTaskBlockModel> _blocks = [];
 
-  DailyPlanRepository(this._prefs) {
+  DailyPlanRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _plansKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_daily_plans_${_userId}_data'
+      : _defaultPlansKey;
+
+  String get _blocksKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_planned_blocks_${_userId}_data'
+      : _defaultBlocksKey;
 
   void _loadFromStorage() {
     final plansJson = _prefs.getString(_plansKey);

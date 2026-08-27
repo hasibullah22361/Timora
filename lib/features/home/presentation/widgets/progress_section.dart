@@ -5,6 +5,8 @@ import '../../../schedule/data/models/schedule_activity.dart';
 import '../../../tasks/presentation/providers/task_provider.dart';
 import '../../../tasks/data/models/task_model.dart';
 import '../../../profile/presentation/providers/user_profile_provider.dart';
+import '../../../focus/presentation/providers/focus_provider.dart';
+import '../../../focus/data/models/focus_session_model.dart';
 
 class ProgressSection extends ConsumerWidget {
   const ProgressSection({super.key});
@@ -13,29 +15,59 @@ class ProgressSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheduleAsync = ref.watch(dailyScheduleProvider);
-    final tasksAsync = ref.watch(allTasksProvider);
+    final todayTasksAsync = ref.watch(todayTasksProvider);
+    final focusSessionsAsync = ref.watch(todayFocusSessionsProvider);
     final profile = ref.watch(userProfileProvider);
 
-    // Compute Schedule completion
+    // 1. Compute Schedule completion
+    int totalActivities = 0;
+    int completedActivities = 0;
     double scheduleProgress = 0.0;
     scheduleAsync.whenData((activities) {
-      if (activities.isNotEmpty) {
-        final completed = activities.where((a) => a.status == ActivityStatus.completed).length;
-        scheduleProgress = completed / activities.length;
+      totalActivities = activities.length;
+      if (totalActivities > 0) {
+        completedActivities = activities.where((a) => a.status == ActivityStatus.completed).length;
+        scheduleProgress = completedActivities / totalActivities;
       }
     });
 
-    // Compute Tasks completion
+    // 2. Compute Tasks completion (for today)
+    int totalTodayTasks = 0;
+    int completedTodayTasks = 0;
     double taskProgress = 0.0;
-    tasksAsync.whenData((tasks) {
-      if (tasks.isNotEmpty) {
-        final completed = tasks.where((t) => t.status == TaskStatus.completed).length;
-        taskProgress = completed / tasks.length;
+    todayTasksAsync.whenData((tasks) {
+      final activeOrCompleted = tasks.where((t) => !t.isDeleted && t.status != TaskStatus.cancelled).toList();
+      totalTodayTasks = activeOrCompleted.length;
+      if (totalTodayTasks > 0) {
+        completedTodayTasks = activeOrCompleted.where((t) => t.status == TaskStatus.completed).length;
+        taskProgress = completedTodayTasks / totalTodayTasks;
       }
     });
 
-    // Compute Overall Daily Productivity
-    final overallProgress = ((scheduleProgress + taskProgress) / 2).clamp(0.0, 1.0);
+    // 3. Compute Focus Goal completion
+    double focusProgress = 0.0;
+    focusSessionsAsync.whenData((sessions) {
+      if (profile.dailyGoalHours > 0) {
+        final totalSeconds = sessions
+            .where((s) => s.status == FocusSessionStatus.completed)
+            .fold<int>(0, (sum, s) => sum + s.actualDurationSeconds);
+        final hoursLogged = totalSeconds / 3600.0;
+        focusProgress = (hoursLogged / profile.dailyGoalHours).clamp(0.0, 1.0);
+      }
+    });
+
+    // 4. Compute Overall Daily Productivity based on actual today items
+    double overallProgress = 0.0;
+    final totalActionableItems = totalActivities + totalTodayTasks;
+    final totalCompletedItems = completedActivities + completedTodayTasks;
+
+    if (totalActionableItems > 0) {
+      overallProgress = (totalCompletedItems / totalActionableItems).clamp(0.0, 1.0);
+    } else if (profile.dailyGoalHours > 0) {
+      overallProgress = focusProgress;
+    } else {
+      overallProgress = 0.0;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,8 +102,8 @@ class ProgressSection extends ConsumerWidget {
           children: [
             _buildProgressItem(context, 'Schedule', scheduleProgress, const Color(0xFF2563EB)),
             _buildProgressItem(context, 'Tasks', taskProgress, const Color(0xFF10B981)),
-            _buildProgressItem(context, 'Focus Goal', (profile.dailyGoalHours > 0 ? 0.75 : 0.0), const Color(0xFFF59E0B)),
-            _buildProgressItem(context, 'Overall', overallProgress > 0 ? overallProgress : 0.5, const Color(0xFF8B5CF6)),
+            _buildProgressItem(context, 'Focus Goal', focusProgress, const Color(0xFFF59E0B)),
+            _buildProgressItem(context, 'Overall', overallProgress, const Color(0xFF8B5CF6)),
           ],
         ),
       ],
@@ -81,6 +113,7 @@ class ProgressSection extends ConsumerWidget {
   Widget _buildProgressItem(BuildContext context, String label, double progress, Color color) {
     final theme = Theme.of(context);
     final clamped = progress.clamp(0.0, 1.0);
+    final percentageInt = (clamped * 100).round();
 
     return Column(
       children: [
@@ -99,7 +132,7 @@ class ProgressSection extends ConsumerWidget {
               ),
             ),
             Text(
-              '${(clamped * 100).toInt()}%',
+              '$percentageInt%',
               style: theme.textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
@@ -125,4 +158,3 @@ class ProgressSection extends ConsumerWidget {
     );
   }
 }
-

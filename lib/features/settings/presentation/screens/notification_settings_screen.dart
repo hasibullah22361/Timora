@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/notification_settings_repository.dart';
 import '../../../notifications/application/notification_service.dart';
+import '../../../notifications/application/voice_announcement_service.dart';
 
 class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -264,15 +265,69 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
             },
           ),
 
-          const SizedBox(height: 32),
-          Center(
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                final service = ref.read(notificationServiceProvider);
-                await service.showImmediateNotification(999, 'Timora Test', 'Timora notifications are working.');
-              },
-              icon: const Icon(Icons.notifications_active),
-              label: const Text('Send Test Notification'),
+          const Divider(),
+          _buildSectionHeader(context, 'SOUND & VOICE ANNOUNCEMENTS'),
+          
+          SwitchListTile(
+            title: const Text('Notification Sound'),
+            subtitle: const Text('Play sound for reminders and alerts'),
+            value: repo.soundEnabled,
+            onChanged: (val) {
+              repo.setSoundEnabled(val);
+              setState(() {});
+            },
+          ),
+          SwitchListTile(
+            title: const Text('Vibration'),
+            subtitle: const Text('Vibrate on scheduled reminders'),
+            value: repo.vibrationEnabled,
+            onChanged: (val) {
+              repo.setVibrationEnabled(val);
+              setState(() {});
+            },
+          ),
+          SwitchListTile(
+            title: const Text('Spoken Activity Announcements'),
+            subtitle: const Text('Speaks "Your [Activity] time starts now" when scheduled'),
+            value: repo.spokenAnnouncementsEnabled,
+            onChanged: (val) {
+              repo.setSpokenAnnouncementsEnabled(val);
+              setState(() {});
+            },
+          ),
+
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final service = ref.read(notificationServiceProvider);
+                      await service.showImmediateNotification(999, 'Timora Test', 'Timora notifications are working.');
+                    },
+                    icon: const Icon(Icons.notifications_active, size: 16),
+                    label: const Text('Test Notification'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final voiceService = ref.read(voiceAnnouncementServiceProvider);
+                      await voiceService.speakSampleAnnouncement('Deep Work');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Speaking sample announcement...')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.volume_up_rounded, size: 16),
+                    label: const Text('Test Voice'),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 32),

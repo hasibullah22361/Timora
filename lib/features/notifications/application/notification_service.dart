@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -8,14 +9,18 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService();
 });
 
+typedef NotificationResponseCallback = void Function(String? payload);
+
 class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
   bool _isInitialized = false;
+  NotificationResponseCallback? onNotificationResponse;
 
-  Future<void> initialize() async {
+  Future<void> initialize({NotificationResponseCallback? onResponse}) async {
     if (_isInitialized) return;
+    onNotificationResponse = onResponse;
 
     const androidInitialize =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -26,6 +31,11 @@ class NotificationService {
 
     await _plugin.initialize(
       settings: initializationSettings,
+      onDidReceiveNotificationResponse: (response) {
+        if (response.payload != null) {
+          onNotificationResponse?.call(response.payload);
+        }
+      },
     );
 
     await _createChannels();
@@ -40,14 +50,18 @@ class NotificationService {
       'timora_routine',
       'Timora Routine',
       description: 'Notifications for activity start and end times',
-      importance: Importance.high,
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
     );
 
     const dailyChannel = AndroidNotificationChannel(
       'timora_daily',
       'Timora Daily',
       description: 'Daily planning and review reminders',
-      importance: Importance.defaultImportance,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
     );
 
     final androidImplementation = _plugin.resolvePlatformSpecificImplementation<
@@ -75,8 +89,12 @@ class NotificationService {
     final granted =
         await androidImplementation.requestNotificationsPermission();
 
-    // Required if Timora uses exact scheduled alarms.
-    await androidImplementation.requestExactAlarmsPermission();
+    // Required if Timora uses exact scheduled alarms on Android 12+.
+    try {
+      await androidImplementation.requestExactAlarmsPermission();
+    } catch (e) {
+      debugPrint('Exact alarms permission notice: $e');
+    }
 
     return granted ?? false;
   }
@@ -92,7 +110,11 @@ class NotificationService {
     return granted ?? false;
   }
 
-  NotificationDetails _notificationDetails(String channelId) {
+  NotificationDetails _notificationDetails(
+    String channelId, {
+    bool playSound = true,
+    bool enableVibration = true,
+  }) {
     final isRoutine = channelId == 'timora_routine';
 
     return NotificationDetails(
@@ -102,8 +124,10 @@ class NotificationService {
         channelDescription: isRoutine
             ? 'Notifications for activity start and end times'
             : 'Daily planning and review reminders',
-        importance: isRoutine ? Importance.high : Importance.defaultImportance,
+        importance: isRoutine ? Importance.max : Importance.high,
         priority: isRoutine ? Priority.high : Priority.defaultPriority,
+        playSound: playSound,
+        enableVibration: enableVibration,
       ),
     );
   }
@@ -113,14 +137,22 @@ class NotificationService {
     String title,
     String body, {
     String channelId = 'timora_daily',
+    String? payload,
+    bool playSound = true,
+    bool enableVibration = true,
   }) async {
-    final details = _notificationDetails(channelId);
+    final details = _notificationDetails(
+      channelId,
+      playSound: playSound,
+      enableVibration: enableVibration,
+    );
 
     await _plugin.show(
       id: id,
       title: title,
       body: body,
       notificationDetails: details,
+      payload: payload,
     );
   }
 
@@ -130,33 +162,47 @@ class NotificationService {
     String body,
     DateTime scheduledDate, {
     String channelId = 'timora_routine',
+    String? payload,
+    bool playSound = true,
+    bool enableVibration = true,
   }) async {
     if (scheduledDate.isBefore(DateTime.now())) {
       return;
     }
 
-    final details = _notificationDetails(channelId);
+    final details = _notificationDetails(
+      channelId,
+      playSound: playSound,
+      enableVibration: enableVibration,
+    );
 
     final scheduledTime = tz.TZDateTime.from(
       scheduledDate,
       tz.local,
     );
 
-    await _plugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: scheduledTime,
-      notificationDetails: details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
+    try {
+      await _plugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: scheduledTime,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: payload,
+      );
+    } catch (_) {}
   }
 
   Future<void> cancelNotification(int id) async {
-    await _plugin.cancel(id: id);
+    try {
+      await _plugin.cancel(id: id);
+    } catch (_) {}
   }
 
   Future<void> cancelAllNotifications() async {
-    await _plugin.cancelAll();
+    try {
+      await _plugin.cancelAll();
+    } catch (_) {}
   }
 }

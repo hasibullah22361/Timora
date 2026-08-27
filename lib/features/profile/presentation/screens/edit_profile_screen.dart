@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/primary_button.dart';
 import '../providers/user_profile_provider.dart';
@@ -20,6 +23,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   late String _selectedAvatar;
   late Color _selectedAvatarColor;
+  String? _customImagePath;
   late String _selectedTimezone;
   late TimeOfDay _workStart;
   late TimeOfDay _workEnd;
@@ -29,7 +33,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   bool _isSaving = false;
 
   final List<String> _avatarPresets = [
-    '🚀', '⚡', '💡', '🌱', '🔥', '🎯', '👨‍💻', '👩‍💻',
+    '⚡', '🚀', '💡', '🌱', '🔥', '🎯', '👨‍💻', '👩‍💻',
     '🧠', '🦁', '🦉', '⭐', '🏆', '💎', '🎨', '🏖️'
   ];
 
@@ -82,6 +86,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     _selectedAvatar = p.avatarPreset;
     _selectedAvatarColor = p.avatarColor;
+    _customImagePath = p.customImagePath;
     _selectedTimezone = _timezones.contains(p.timezone) ? p.timezone : _timezones.first;
     _workStart = p.workHoursStart;
     _workEnd = p.workHoursEnd;
@@ -99,6 +104,82 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 88,
+      );
+
+      if (picked != null) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final fileName = 'profile_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
+        
+        setState(() {
+          _customImagePath = savedImage.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not access image: $e')),
+        );
+      }
+    }
+  }
+
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Change Profile Photo', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF2563EB)),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined, color: Color(0xFF10B981)),
+                title: const Text('Take a Photo'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              if (_customImagePath != null)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('Remove Photo', style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _customImagePath = null;
+                    });
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -112,6 +193,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       bio: _bioController.text.trim(),
       avatarPreset: _selectedAvatar,
       avatarColorValue: _selectedAvatarColor.toARGB32(),
+      customImagePath: _customImagePath,
+      clearCustomImage: _customImagePath == null,
       timezone: _selectedTimezone,
       workHoursStartMinutes: _workStart.hour * 60 + _workStart.minute,
       workHoursEndMinutes: _workEnd.hour * 60 + _workEnd.minute,
@@ -137,6 +220,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasCustom = _customImagePath != null && File(_customImagePath!).existsSync();
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -155,37 +239,93 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           children: [
             // -------------------------------------------------------------
-            // Avatar Selector Card
+            // Profile Picture & Avatar Selector Card
             // -------------------------------------------------------------
             Center(
               child: Column(
                 children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: _selectedAvatarColor.withValues(alpha: 0.18),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _selectedAvatarColor, width: 3),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(_selectedAvatar, style: const TextStyle(fontSize: 40)),
+                  Stack(
+                    children: [
+                      Container(
+                        width: 96,
+                        height: 96,
+                        decoration: BoxDecoration(
+                          color: _selectedAvatarColor.withValues(alpha: 0.18),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _selectedAvatarColor, width: 3),
+                        ),
+                        alignment: Alignment.center,
+                        child: hasCustom
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(48),
+                                child: Image.file(
+                                  File(_customImagePath!),
+                                  width: 96,
+                                  height: 96,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Text(_selectedAvatar, style: const TextStyle(fontSize: 48)),
+                      ),
+                      PositionedDirectional(
+                        bottom: 0,
+                        end: 0,
+                        child: InkWell(
+                          onTap: _showImageSourceDialog,
+                          borderRadius: BorderRadius.circular(18),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: theme.colorScheme.surface, width: 2),
+                            ),
+                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  Text('Select Avatar & Color', style: theme.textTheme.labelMedium),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.photo_library_outlined, size: 16),
+                        label: Text(hasCustom ? 'Change Photo' : 'Upload Photo'),
+                        onPressed: () => _pickImage(ImageSource.gallery),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
+                      if (hasCustom) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          tooltip: 'Remove Photo',
+                          onPressed: () => setState(() => _customImagePath = null),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            // Avatar Emoji selector
+            // Avatar Emoji preset selector (used when no custom image or as fallback)
+            Text('Or Choose Emoji Avatar Preset', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              alignment: WrapAlignment.center,
               children: _avatarPresets.map((emoji) {
-                final isSel = _selectedAvatar == emoji;
+                final isSel = !hasCustom && _selectedAvatar == emoji;
                 return InkWell(
-                  onTap: () => setState(() => _selectedAvatar = emoji),
+                  onTap: () => setState(() {
+                    _selectedAvatar = emoji;
+                    _customImagePath = null; // Switching to emoji preset
+                  }),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
                     width: 44,
@@ -207,7 +347,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             const SizedBox(height: 14),
             // Avatar Color selector
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: _colorPresets.map((col) {
                 final isSel = _selectedAvatarColor == col;
                 return Padding(
@@ -286,7 +425,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             // -------------------------------------------------------------
             _buildSectionTitle(context, 'Timezone & Schedule Preferences'),
             const SizedBox(height: 12),
-            // Timezone dropdown
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -315,7 +453,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            // Working / Study hours
             Row(
               children: [
                 Expanded(

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/home_provider.dart';
@@ -17,10 +18,9 @@ import '../widgets/dashboard_review_widget.dart';
 import 'package:timora/features/settings/presentation/providers/settings_provider.dart';
 import 'package:timora/features/settings/data/models/settings_models.dart';
 import 'package:timora/features/cloud_sync/presentation/widgets/sync_indicator_widget.dart';
-import 'package:timora/features/ai_assistant/presentation/widgets/dashboard_ai_widget.dart';
-import 'package:timora/features/ai_assistant/presentation/widgets/timora_ai_button.dart';
 import 'package:timora/features/profile/presentation/providers/user_profile_provider.dart';
 import 'package:timora/features/profile/presentation/screens/profile_screen.dart';
+import 'package:timora/features/ai_assistant/presentation/widgets/timora_ai_button.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -30,6 +30,7 @@ class HomeScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final settings = ref.watch(settingsProvider);
     final profile = ref.watch(userProfileProvider);
+    final hasCustomAvatar = profile.hasCustomImage && File(profile.customImagePath!).existsSync();
     
     // Build widgets map
     final widgetMap = <DashboardWidgetType, Widget>{
@@ -100,7 +101,7 @@ class HomeScreen extends ConsumerWidget {
                         MaterialPageRoute(builder: (_) => const ProfileScreen()),
                       );
                     },
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(25),
                     child: Container(
                       width: 50,
                       height: 50,
@@ -110,10 +111,20 @@ class HomeScreen extends ConsumerWidget {
                         border: Border.all(color: profile.avatarColor, width: 2),
                       ),
                       alignment: Alignment.center,
-                      child: Text(
-                        profile.avatarPreset,
-                        style: const TextStyle(fontSize: 26),
-                      ),
+                      child: hasCustomAvatar
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: Image.file(
+                                File(profile.customImagePath!),
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Text(
+                              profile.avatarPreset,
+                              style: const TextStyle(fontSize: 26),
+                            ),
                     ),
                   ),
                 ],
@@ -149,15 +160,12 @@ class HomeScreen extends ConsumerWidget {
               
               // Focus Timer
               const FocusDashboardWidget(),
+              
               // Today's Progress
               const ProgressSection(),
               const SizedBox(height: 32),
             
-            // AI Assistant Card
-            const DashboardAIWidget(),
-            const SizedBox(height: 32),
-            
-            // Dynamic Dashboard based on settings
+              // Dynamic Dashboard based on settings
               ...settings.dashboardOrder.where((type) => settings.dashboardVisibility[type] == true).map((type) {
                 return widgetMap[type] ?? const SizedBox.shrink();
               }),

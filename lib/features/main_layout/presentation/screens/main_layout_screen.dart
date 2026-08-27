@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../home/presentation/screens/home_screen.dart';
 import '../../../schedule/presentation/screens/schedule_screen.dart';
 import '../../../tasks/presentation/screens/tasks_screen.dart';
 import '../../../routine/presentation/screens/routines_screen.dart';
-import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../others/presentation/screens/others_screen.dart';
+import '../../../notifications/application/voice_announcement_service.dart';
+import '../../../schedule/data/repositories/schedule_repository.dart';
 
-class MainLayoutScreen extends StatefulWidget {
+class MainLayoutScreen extends ConsumerStatefulWidget {
   const MainLayoutScreen({super.key});
 
   @override
-  State<MainLayoutScreen> createState() => _MainLayoutScreenState();
+  ConsumerState<MainLayoutScreen> createState() => _MainLayoutScreenState();
 }
 
-class _MainLayoutScreenState extends State<MainLayoutScreen> {
+class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
   int _currentIndex = 0;
   DateTime? _lastBackPressTime;
 
@@ -22,8 +25,29 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
     const ScheduleScreen(),
     const TasksScreen(),
     const RoutinesScreen(),
-    const ProfileScreen(),
+    const OthersScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final voiceService = ref.read(voiceAnnouncementServiceProvider);
+      final scheduleRepo = ref.read(scheduleRepositoryProvider);
+      
+      voiceService.startScheduleMonitoring(() async {
+        final now = DateTime.now();
+        final date = DateTime(now.year, now.month, now.day);
+        return await scheduleRepo.getActivitiesForDate(date);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(voiceAnnouncementServiceProvider).stopScheduleMonitoring();
+    super.dispose();
+  }
 
   void _handlePopInvoked(bool didPop) {
     if (didPop) return;
@@ -96,9 +120,9 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
               label: 'Routines',
             ),
             NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person_rounded),
-              label: 'Profile',
+              icon: Icon(Icons.grid_view_outlined),
+              selectedIcon: Icon(Icons.grid_view_rounded),
+              label: 'Others',
             ),
           ],
         ),
@@ -106,4 +130,3 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
     );
   }
 }
-

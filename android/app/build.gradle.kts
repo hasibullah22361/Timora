@@ -6,7 +6,11 @@ plugins {
 
 android {
     namespace = "com.example.timora"
-    compileSdk = flutter.compileSdkVersion
+
+    // Updated from flutter.compileSdkVersion to Android API 36
+    // because flutter_plugin_android_lifecycle requires compileSdk 36+.
+    compileSdk = 36
+
     ndkVersion = "30.0.15729638"
 
     compileOptions {
@@ -16,24 +20,21 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.timora"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+
+        // Keep Flutter's defaults for minimum and target SDK.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
+
+        // Version information comes from pubspec.yaml.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Debug signing for now.
+            // Configure a proper release keystore before publishing.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

@@ -8,8 +8,6 @@ import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../../../main_layout/presentation/screens/main_layout_screen.dart';
 
-import '../../../profile/presentation/providers/user_profile_provider.dart';
-
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -21,29 +19,49 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  String? _localValidationError;
+
+  static final RegExp _emailRegExp = RegExp(
+    r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+  );
 
   void _login() async {
+    // Dismiss keyboard
+    FocusScope.of(context).unfocus();
+
     final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    // Client-side validations
+    if (email.isEmpty) {
+      setState(() => _localValidationError = 'Please enter your email address.');
+      return;
+    }
+    if (!_emailRegExp.hasMatch(email)) {
+      setState(() => _localValidationError = 'Please enter a valid email address.');
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() => _localValidationError = 'Please enter your password.');
+      return;
+    }
+
+    setState(() => _localValidationError = null);
+
     final success = await ref.read(authControllerProvider.notifier).login(
       email,
-      _passwordController.text,
+      password,
     );
+
     if (success && mounted) {
-      final currentProfile = ref.read(userProfileProvider);
-      if (email.isNotEmpty && currentProfile.email != email) {
-        final namePart = email.split('@').first;
-        ref.read(userProfileProvider.notifier).updateProfile(
-          currentProfile.copyWith(
-            email: email,
-            username: namePart,
-          ),
-        );
-      }
       _navigateToHome();
     }
   }
 
   void _loginAsGuest() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _localValidationError = null);
+
     final success = await ref.read(authControllerProvider.notifier).loginAsGuest();
     if (success && mounted) {
       _navigateToHome();
@@ -51,10 +69,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _navigateToHome() {
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => const MainLayoutScreen(),
       ),
+      (route) => false,
     );
   }
 
@@ -69,6 +88,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = ref.watch(authControllerProvider);
+    final displayedError = _localValidationError ?? authState.errorMessage;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -96,16 +116,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              if (authState.hasError) ...[
+              if (displayedError != null) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                   ),
-                  child: Text(
-                    authState.error.toString(),
-                    style: const TextStyle(color: Colors.red),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          displayedError,
+                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -115,6 +144,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 hint: 'Enter your email',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
+                onChanged: (_) {
+                  if (_localValidationError != null) {
+                    setState(() => _localValidationError = null);
+                  }
+                },
               ),
               const SizedBox(height: 16),
               CustomTextField(
@@ -128,24 +162,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     _obscurePassword = !_obscurePassword;
                   });
                 },
+                onChanged: (_) {
+                  if (_localValidationError != null) {
+                    setState(() => _localValidationError = null);
+                  }
+                },
               ),
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () {
+                    ref.read(authControllerProvider.notifier).clearError();
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
                     );
                   },
-                  child: Text('Forgot Password?', style: TextStyle(color: theme.colorScheme.primary)),
+                  child: Text(
+                    'Forgot Password?',
+                    style: TextStyle(color: theme.colorScheme.primary),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
               PrimaryButton(
                 text: 'Sign In',
                 isLoading: authState.isLoading,
-                onPressed: _login,
+                onPressed: authState.isLoading ? null : _login,
               ),
               const SizedBox(height: 16),
               OutlinedButton(
@@ -174,11 +217,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   TextButton(
                     onPressed: () {
+                      ref.read(authControllerProvider.notifier).clearError();
                       Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const RegisterScreen()),
                       );
                     },
-                    child: Text('Create Account', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'Create Account',
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),

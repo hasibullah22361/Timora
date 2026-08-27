@@ -4,23 +4,30 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/project_model.dart';
 
 final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return ProjectRepository(prefs);
+  final currentUser = ref.watch(currentUserProvider);
+  return ProjectRepository(prefs, userId: currentUser?.id);
 });
 
 class ProjectRepository {
-  static const String _storageKey = 'timora_projects_data';
+  static const String _defaultStorageKey = 'timora_projects_data';
 
   final SharedPreferences _prefs;
+  final String? _userId;
   final List<ProjectModel> _projects = [];
   final _uuid = const Uuid();
 
-  ProjectRepository(this._prefs) {
+  ProjectRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
   }
+
+  String get _storageKey => (_userId != null && _userId!.isNotEmpty)
+      ? 'timora_projects_${_userId}_data'
+      : _defaultStorageKey;
 
   void _loadFromStorage() {
     final jsonString = _prefs.getString(_storageKey);

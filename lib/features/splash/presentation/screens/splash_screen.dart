@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/timora_branding.dart';
+import '../../../auth/data/auth_repository.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
+import '../../../main_layout/presentation/screens/main_layout_screen.dart';
 import '../../../onboarding/data/onboarding_repository.dart';
 import '../../../onboarding/presentation/screens/onboarding_screen.dart';
 
@@ -21,7 +23,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(milliseconds: 1600),
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
@@ -29,24 +31,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
 
     _animationController.forward();
 
-    Future.delayed(const Duration(seconds: 3), () {
-      _checkOnboardingAndNavigate();
+    Future.delayed(const Duration(milliseconds: 2400), () {
+      _checkAuthAndNavigate();
     });
   }
 
-  void _checkOnboardingAndNavigate() {
+  void _checkAuthAndNavigate() {
     if (!mounted) return;
     
     final onboardingRepo = ref.read(onboardingRepositoryProvider);
     final isComplete = onboardingRepo.isOnboardingComplete();
 
-    if (isComplete) {
+    if (!isComplete) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+      );
+      return;
+    }
+
+    final authRepo = ref.read(authRepositoryProvider);
+    final session = authRepo.getCurrentSession();
+
+    if (session != null && session.isValid) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainLayoutScreen()),
       );
     } else {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     }
   }
@@ -63,10 +75,36 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: const TimoraBranding(),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: const TimoraBranding(),
+              ),
+            ),
+            Positioned(
+              bottom: 48,
+              left: 64,
+              right: 64,
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: Center(
+                  child: Container(
+                    height: 4,
+                    width: 120,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2563EB), Color(0xFF06B6D4), Color(0xFFEC4899)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
