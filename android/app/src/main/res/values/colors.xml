@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Timora Light Theme Widget Colors -->
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_surface">#F8FAFC</color>
+    <color name="widget_surface_highlight">#EFF6FF</color>
+    <color name="widget_border">#E2E8F0</color>
+    <color name="widget_primary">#2563EB</color>
+    <color name="widget_primary_dark">#1D4ED8</color>
+    <color name="widget_accent">#10B981</color>
+    <color name="widget_text_primary">#0F172A</color>
+    <color name="widget_text_secondary">#64748B</color>
+    <color name="widget_text_muted">#94A3B8</color>
+    <color name="widget_text_on_primary">#FFFFFF</color>
+    <color name="widget_badge_now_bg">#EFF6FF</color>
+    <color name="widget_badge_now_text">#2563EB</color>
+    <color name="widget_badge_next_bg">#F1F5F9</color>
+    <color name="widget_badge_next_text">#64748B</color>
+    <color name="widget_badge_done_bg">#ECFDF5</color>
+    <color name="widget_badge_done_text">#059669</color>
+    <color name="widget_progress_bg">#E2E8F0</color>
+</resources>

@@ -2,8 +2,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:timora/features/focus/data/models/focus_session_model.dart';
+import 'package:timora/features/focus/data/models/focus_stats_model.dart';
 import 'package:timora/features/focus/data/repositories/focus_repository.dart';
+import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
+import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
+import 'package:timora/features/cloud_sync/services/sync_service.dart';
 import '../../../notifications/application/notification_service.dart';
+import '../../../widget/services/widget_update_service.dart';
 
 class FocusTimerState {
   final FocusSessionModel? activeSession;
@@ -110,6 +115,7 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
     state = FocusTimerState(activeSession: session, elapsedSeconds: 0);
     _startUiTimer();
     _scheduleNotification(session.plannedDurationSeconds);
+    _updateWidgets();
   }
 
   Future<void> pauseSession() async {
@@ -125,6 +131,7 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
     
     await _repo.saveSession(s);
     state = FocusTimerState(activeSession: s, elapsedSeconds: state.elapsedSeconds);
+    _updateWidgets();
   }
 
   Future<void> resumeSession() async {
@@ -142,6 +149,7 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
     state = FocusTimerState(activeSession: s, elapsedSeconds: state.elapsedSeconds);
     _startUiTimer();
     _scheduleNotification(state.remainingSeconds);
+    _updateWidgets();
   }
 
   Future<void> _finishSessionAutomatically() async {
@@ -153,8 +161,17 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
       actualDurationSeconds: s.plannedDurationSeconds,
     );
     await _repo.saveSession(finished);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'focus_sessions',
+      entityId: finished.id,
+      operation: SyncOperation.create,
+    );
     state = FocusTimerState(activeSession: finished, elapsedSeconds: s.plannedDurationSeconds);
     _ref.invalidate(todayFocusSessionsProvider);
+    _ref.invalidate(allFocusSessionsProvider);
+    _ref.invalidate(focusStatsProvider);
+    _ref.read(syncServiceProvider).autoSync();
+    _updateWidgets();
   }
 
   Future<void> finishSessionEarly() async {
@@ -169,8 +186,17 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
       actualDurationSeconds: state.elapsedSeconds,
     );
     await _repo.saveSession(finished);
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'focus_sessions',
+      entityId: finished.id,
+      operation: SyncOperation.create,
+    );
     state = FocusTimerState(activeSession: finished, elapsedSeconds: state.elapsedSeconds);
     _ref.invalidate(todayFocusSessionsProvider);
+    _ref.invalidate(allFocusSessionsProvider);
+    _ref.invalidate(focusStatsProvider);
+    _ref.read(syncServiceProvider).autoSync();
+    _updateWidgets();
   }
 
   Future<void> cancelSession() async {
@@ -184,6 +210,13 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
     );
     await _repo.saveSession(s);
     state = FocusTimerState(); // Clear UI
+    _updateWidgets();
+  }
+
+  void _updateWidgets() {
+    try {
+      _ref.read(widgetUpdateServiceProvider).updateWidgets();
+    } catch (_) {}
   }
   
   void _scheduleNotification(int secondsDelay) {
@@ -213,4 +246,9 @@ final todayFocusSessionsProvider = FutureProvider<List<FocusSessionModel>>((ref)
 
 final allFocusSessionsProvider = FutureProvider<List<FocusSessionModel>>((ref) async {
   return ref.watch(focusRepositoryProvider).getAllCompletedSessions();
+});
+
+final focusStatsProvider = FutureProvider<FocusStatsModel>((ref) async {
+  final sessions = await ref.watch(allFocusSessionsProvider.future);
+  return FocusStatsModel.fromSessions(sessions);
 });

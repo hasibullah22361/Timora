@@ -2,9 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/models/analytics_models.dart';
+import '../data/models/productivity_score_model.dart';
 import '../../focus/presentation/providers/focus_provider.dart';
 import '../../focus/data/models/focus_session_model.dart';
 import '../../tasks/presentation/providers/task_provider.dart';
+import '../../habits/presentation/providers/habit_provider.dart';
+import '../../schedule/data/models/schedule_activity.dart';
+import '../../schedule/presentation/providers/schedule_provider.dart';
 
 final analyticsServiceProvider = Provider<AnalyticsService>((ref) {
   return AnalyticsService(ref);
@@ -190,6 +194,29 @@ class AnalyticsService {
     }
 
     return insights;
+  }
+
+  Future<ProductivityScoreModel> getProductivityScore(AnalyticsPeriod period) async {
+    final taskStats = await getTaskStats(period);
+    final focusStats = await getFocusStats(period);
+    
+    final habits = await _ref.read(allHabitsProvider.future);
+    final totalStreaks = habits.fold<int>(0, (sum, h) => sum + h.currentStreak);
+    final activeHabitCount = habits.where((h) => h.currentStreak > 0).length;
+    final habitRate = habits.isEmpty ? 0.8 : (activeHabitCount / habits.length);
+    
+    final activities = await _ref.read(scheduleActivitiesProvider.future);
+    final routineRate = activities.isEmpty
+        ? 0.75
+        : (activities.where((a) => a.status == ActivityStatus.completed).length / activities.length);
+        
+    return ProductivityScoreModel.calculate(
+      taskCompletionRate: taskStats.completionRate,
+      focusMinutes: focusStats.totalSeconds ~/ 60,
+      habitCompletionRate: habitRate,
+      routineAdherence: routineRate,
+      activeStreakDays: totalStreaks,
+    );
   }
 }
 

@@ -62,5 +62,25 @@ class MonthlyPlanRepository {
     }
     await _saveToStorage();
   }
+
+  Future<MonthlyPlanModel?> deletePlan(String id) async {
+    final index = _plans.indexWhere((p) => p.id == id);
+    if (index >= 0) {
+      final removed = _plans.removeAt(index);
+      await _saveToStorage();
+      return removed;
+    }
+    return null;
+  }
+
+  Future<MonthlyPlanModel?> deletePlanForMonth(int year, int month) async {
+    final index = _plans.indexWhere((p) => p.year == year && p.month == month);
+    if (index >= 0) {
+      final removed = _plans.removeAt(index);
+      await _saveToStorage();
+      return removed;
+    }
+    return null;
+  }
 }
 

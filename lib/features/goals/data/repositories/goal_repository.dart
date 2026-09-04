@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
-
 import '../../../../core/providers/shared_prefs_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/goal_model.dart';
@@ -22,7 +20,6 @@ class GoalRepository {
   final String? _userId;
   final List<GoalModel> _goals = [];
   final List<MilestoneModel> _milestones = [];
-  final _uuid = const Uuid();
 
   GoalRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
@@ -40,29 +37,26 @@ class GoalRepository {
     final goalsJson = _prefs.getString(_goalsKey);
     final milestonesJson = _prefs.getString(_milestonesKey);
 
-    if (goalsJson != null) {
+    _goals.clear();
+    _milestones.clear();
+
+    if (goalsJson != null && goalsJson.isNotEmpty) {
       try {
         final List<dynamic> decodedGoals = jsonDecode(goalsJson);
-        _goals.clear();
         for (var item in decodedGoals) {
           _goals.add(GoalModel.fromJson(item as Map<String, dynamic>));
-        }
-
-        if (milestonesJson != null) {
-          final List<dynamic> decodedMilestones = jsonDecode(milestonesJson);
-          _milestones.clear();
-          for (var item in decodedMilestones) {
-            _milestones.add(MilestoneModel.fromJson(item as Map<String, dynamic>));
-          }
-        }
-
-        if (_goals.isNotEmpty) {
-          return;
         }
       } catch (_) {}
     }
 
-    _seedData();
+    if (milestonesJson != null && milestonesJson.isNotEmpty) {
+      try {
+        final List<dynamic> decodedMilestones = jsonDecode(milestonesJson);
+        for (var item in decodedMilestones) {
+          _milestones.add(MilestoneModel.fromJson(item as Map<String, dynamic>));
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> _saveToStorage() async {
@@ -70,57 +64,6 @@ class GoalRepository {
     final milestonesJson = jsonEncode(_milestones.map((m) => m.toJson()).toList());
     await _prefs.setString(_goalsKey, goalsJson);
     await _prefs.setString(_milestonesKey, milestonesJson);
-  }
-
-  void _seedData() {
-    final now = DateTime.now();
-    final goalId = _uuid.v4();
-    _goals.add(
-      GoalModel(
-        id: goalId,
-        title: 'Master Professional Skillset',
-        description: 'Complete core curriculum, build real projects, and achieve certification.',
-        category: 'Personal Development',
-        status: GoalStatus.active,
-        priority: GoalPriority.high,
-        targetDate: now.add(const Duration(days: 120)),
-        createdAt: now.subtract(const Duration(days: 10)),
-      ),
-    );
-
-    _milestones.add(
-      MilestoneModel(
-        id: _uuid.v4(),
-        goalId: goalId,
-        title: 'Foundational Knowledge & Principles',
-        status: MilestoneStatus.completed,
-        order: 0,
-        createdAt: now.subtract(const Duration(days: 10)),
-        completedAt: now.subtract(const Duration(days: 5)),
-      ),
-    );
-    _milestones.add(
-      MilestoneModel(
-        id: _uuid.v4(),
-        goalId: goalId,
-        title: 'Core Practice & Applied Projects',
-        status: MilestoneStatus.completed,
-        order: 1,
-        createdAt: now.subtract(const Duration(days: 10)),
-        completedAt: now.subtract(const Duration(days: 2)),
-      ),
-    );
-    _milestones.add(
-      MilestoneModel(
-        id: _uuid.v4(),
-        goalId: goalId,
-        title: 'Final Mastery & Milestone Delivery',
-        status: MilestoneStatus.inProgress,
-        order: 2,
-        createdAt: now.subtract(const Duration(days: 10)),
-      ),
-    );
-    _saveToStorage();
   }
 
   // GOALS CRUD

@@ -117,6 +117,31 @@ class DailyPlanRepository {
     await _saveToStorage();
   }
 
+  Future<DailyPlanModel?> deletePlan(String id) async {
+    final index = _plans.indexWhere((p) => p.id == id);
+    if (index >= 0) {
+      final removed = _plans.removeAt(index);
+      _blocks.removeWhere((b) => b.dailyPlanId == id);
+      await _saveToStorage();
+      return removed;
+    }
+    return null;
+  }
+
+  Future<DailyPlanModel?> deletePlanForDate(DateTime date) async {
+    final index = _plans.indexWhere((p) =>
+        p.date.year == date.year &&
+        p.date.month == date.month &&
+        p.date.day == date.day);
+    if (index >= 0) {
+      final removed = _plans.removeAt(index);
+      _blocks.removeWhere((b) => b.dailyPlanId == removed.id);
+      await _saveToStorage();
+      return removed;
+    }
+    return null;
+  }
+
   Future<void> deleteBlock(String id) async {
     _blocks.removeWhere((b) => b.id == id);
     await _saveToStorage();

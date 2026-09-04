@@ -7,6 +7,9 @@ import '../../../cloud_sync/data/repositories/sync_repository.dart';
 import '../../../cloud_sync/services/sync_service.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 import '../../../schedule/presentation/providers/schedule_provider.dart';
+import '../../application/routine_scheduler_service.dart';
+import '../../../notifications/application/notification_controller.dart';
+import '../../../widget/services/widget_update_service.dart';
 
 final routinesProvider = FutureProvider<List<Routine>>((ref) async {
   final repo = ref.watch(routineRepositoryProvider);
@@ -39,6 +42,23 @@ class RoutineNotifier extends StateNotifier<AsyncValue<void>> {
     _ref.invalidate(routineBlocksProvider(routineId));
     _ref.invalidate(dailyScheduleProvider);
     _ref.invalidate(scheduleActivitiesProvider);
+
+    // Proactively generate schedule and sync speaking alarms for today
+    // even if the Schedule tab is not currently open
+    try {
+      final today = DateTime.now();
+      final date = DateTime(today.year, today.month, today.day);
+      _ref.read(routineSchedulerServiceProvider).generateScheduleForDate(date).then((_) {
+        try {
+          _ref.read(notificationControllerProvider).syncScheduleNotifications(date);
+        } catch (_) {}
+      });
+    } catch (_) {}
+
+    try {
+      _ref.read(widgetUpdateServiceProvider).updateWidgets();
+    } catch (_) {}
+
     _ref.read(syncServiceProvider).autoSync();
   }
 
@@ -71,6 +91,7 @@ class RoutineNotifier extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<void> deleteRoutine(String id) async {
+    await _ref.read(routineSchedulerServiceProvider).cleanupActivitiesForRoutine(id);
     await _repo.deleteRoutine(id);
     await _ref.read(syncRepositoryProvider).enqueueChange(
       entityType: 'routines',
@@ -101,6 +122,7 @@ class RoutineNotifier extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<void> deleteRoutineBlock(String id, String routineId) async {
+    await _ref.read(routineSchedulerServiceProvider).cleanupActivitiesForBlock(id);
     await _repo.deleteRoutineBlock(id);
     await _ref.read(syncRepositoryProvider).enqueueChange(
       entityType: 'routine_blocks',

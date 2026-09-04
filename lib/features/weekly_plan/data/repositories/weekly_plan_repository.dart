@@ -66,5 +66,28 @@ class WeeklyPlanRepository {
     }
     await _saveToStorage();
   }
+
+  Future<WeeklyPlanModel?> deletePlan(String id) async {
+    final index = _plans.indexWhere((p) => p.id == id);
+    if (index >= 0) {
+      final removed = _plans.removeAt(index);
+      await _saveToStorage();
+      return removed;
+    }
+    return null;
+  }
+
+  Future<WeeklyPlanModel?> deletePlanForWeek(DateTime startOfWeek) async {
+    final index = _plans.indexWhere((p) =>
+        p.weekStartDate.year == startOfWeek.year &&
+        p.weekStartDate.month == startOfWeek.month &&
+        p.weekStartDate.day == startOfWeek.day);
+    if (index >= 0) {
+      final removed = _plans.removeAt(index);
+      await _saveToStorage();
+      return removed;
+    }
+    return null;
+  }
 }
 

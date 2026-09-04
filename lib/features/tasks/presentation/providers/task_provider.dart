@@ -1,14 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
+import 'package:timora/features/schedule/services/smart_rescheduling_service.dart';
 import 'package:timora/features/tasks/data/models/task_model.dart';
 import 'package:timora/features/tasks/data/models/subtask_model.dart';
 import 'package:timora/features/tasks/data/repositories/task_repository.dart';
 import '../../../notifications/application/notification_service.dart';
+import '../../../notifications/application/voice_announcement_service.dart';
+import '../../../notifications/application/alarm_scheduler_service.dart';
+import '../../../notifications/application/notification_event_engine.dart';
 import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
 import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
 import 'package:timora/features/cloud_sync/services/sync_service.dart';
+import '../../../widget/services/widget_update_service.dart';
 import 'package:timora/features/home/presentation/providers/home_provider.dart';
 import 'package:timora/features/goals/presentation/providers/goal_provider.dart';
 import 'package:timora/features/projects/presentation/providers/project_provider.dart';
+import 'package:timora/features/daily_plan/presentation/providers/daily_plan_provider.dart';
 
 final taskSearchQueryProvider = StateProvider<String>((ref) => '');
 
@@ -80,32 +87,56 @@ final subtasksProvider = FutureProvider.family<List<SubtaskModel>, String>((ref,
   return repo.getSubtasksForTask(taskId);
 });
 
+final isTaskBlockedProvider = Provider.family<bool, String>((ref, taskId) {
+  final repo = ref.watch(taskRepositoryProvider);
+  // Re-run whenever allTasks updates
+  ref.watch(allTasksProvider);
+  return repo.isTaskBlocked(taskId);
+});
+
+final taskPrerequisitesProvider = Provider.family<List<TaskModel>, String>((ref, taskId) {
+  final repo = ref.watch(taskRepositoryProvider);
+  ref.watch(allTasksProvider);
+  return repo.getPrerequisitesForTask(taskId);
+});
+
+final taskDependentsProvider = Provider.family<List<TaskModel>, String>((ref, taskId) {
+  final repo = ref.watch(taskRepositoryProvider);
+  ref.watch(allTasksProvider);
+  return repo.getDependentTasks(taskId);
+});
+
 class TaskNotifier extends StateNotifier<AsyncValue<void>> {
   final TaskRepository _repo;
   final NotificationService _notif;
+  final VoiceAnnouncementService _voice;
+  final AlarmSchedulerService _alarmScheduler;
   final Ref _ref;
 
-  TaskNotifier(this._repo, this._notif, this._ref) : super(const AsyncValue.data(null));
+  TaskNotifier(this._repo, this._notif, this._voice, this._alarmScheduler, this._ref)
+      : super(const AsyncValue.data(null));
 
   void _syncNotification(TaskModel task) {
-    final id = task.id.hashCode.abs();
-    _notif.cancelNotification(id);
-    
-    if (!task.isDeleted && task.status == TaskStatus.pending && task.reminderEnabled && task.dueDate != null && task.dueTime != null) {
-      final scheduledTime = DateTime(
-        task.dueDate!.year, task.dueDate!.month, task.dueDate!.day,
-        task.dueTime!.hour, task.dueTime!.minute
-      ).subtract(Duration(minutes: task.reminderMinutesBefore));
-      
-      if (scheduledTime.isAfter(DateTime.now())) {
-        _notif.scheduleNotification(id, 'Task Reminder', task.title, scheduledTime, channelId: 'timora_daily');
-      }
+    try {
+      _ref.read(notificationEventEngineProvider).syncTask(task);
+    } catch (e) {
+      // Fallback
+      final id = task.id.hashCode.abs();
+      _notif.cancelNotification(id);
+      _alarmScheduler.cancelTaskAlarm(task.id);
     }
   }
 
   void _notifyRelated(TaskModel task) {
     _ref.invalidate(allTasksProvider);
+    _ref.invalidate(todayTasksProvider);
+    _ref.invalidate(overdueTasksProvider);
+    _ref.invalidate(upcomingTasksProvider);
     _ref.invalidate(dailyScheduleProvider);
+    if (task.dueDate != null) {
+      _ref.invalidate(dailyPlanProvider(task.dueDate!));
+      _ref.invalidate(timelineProvider(task.dueDate!));
+    }
     if (task.goalId != null && task.goalId!.isNotEmpty) {
       _ref.invalidate(allGoalsProvider);
       _ref.invalidate(goalProgressProvider(task.goalId!));
@@ -114,6 +145,9 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
       _ref.invalidate(allProjectsProvider);
       _ref.invalidate(projectProgressProvider(task.projectId!));
     }
+    try {
+      _ref.read(widgetUpdateServiceProvider).updateWidgets();
+    } catch (_) {}
     _ref.read(syncServiceProvider).autoSync();
   }
 
@@ -152,6 +186,39 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
       operation: SyncOperation.update,
     );
     _notifyRelated(completed);
+
+    // Speak task completion announcement
+    _voice.speakTaskCompleted(taskId: task.id, taskName: task.title);
+
+    // If recurring, automatically generate next occurrence
+    if (task.recurrence != 'none' && task.recurrence.isNotEmpty) {
+      final baseDate = task.dueDate ?? DateTime.now();
+      final nextDate = SmartReschedulingService.calculateNextRecurringDate(
+        currentDate: baseDate,
+        recurrence: task.recurrence,
+      );
+      final nextTask = TaskModel(
+        id: const Uuid().v4(),
+        title: task.title,
+        description: task.description,
+        status: TaskStatus.pending,
+        priority: task.priority,
+        category: task.category,
+        dueDate: nextDate,
+        dueTime: task.dueTime,
+        startTime: task.startTime,
+        endTime: task.endTime,
+        reminderEnabled: task.reminderEnabled,
+        reminderMinutesBefore: task.reminderMinutesBefore,
+        projectId: task.projectId,
+        goalId: task.goalId,
+        milestoneId: task.milestoneId,
+        recurrence: task.recurrence,
+        estimatedDurationMinutes: task.estimatedDurationMinutes,
+        createdAt: DateTime.now(),
+      );
+      await createTask(nextTask);
+    }
   }
 
   Future<void> undoCompleteTask(TaskModel task) async {
@@ -233,6 +300,8 @@ final taskNotifierProvider = Provider<TaskNotifier>((ref) {
   return TaskNotifier(
     ref.watch(taskRepositoryProvider),
     ref.watch(notificationServiceProvider),
+    ref.watch(voiceAnnouncementServiceProvider),
+    ref.watch(alarmSchedulerServiceProvider),
     ref,
   );
 });

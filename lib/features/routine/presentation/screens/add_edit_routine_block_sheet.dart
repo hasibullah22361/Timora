@@ -6,6 +6,8 @@ import '../../data/models/routine_block.dart';
 import '../providers/routine_provider.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../core/widgets/suggestion_text_field.dart';
+import '../../../../core/widgets/icon_picker.dart';
 
 class AddEditRoutineBlockSheet extends ConsumerStatefulWidget {
   final String routineId;
@@ -164,20 +166,36 @@ class _AddEditRoutineBlockSheetState extends ConsumerState<AddEditRoutineBlockSh
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 54,
-                          height: 54,
-                          decoration: BoxDecoration(
-                            color: _selectedColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: _selectedColor, width: 2),
+                        InkWell(
+                          onTap: () async {
+                            final chosen = await IconPickerSheet.show(context, currentIcon: _selectedIcon);
+                            if (chosen != null) {
+                              setState(() => _selectedIcon = chosen);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: _selectedColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: _selectedColor, width: 2),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(_selectedIcon, style: const TextStyle(fontSize: 28)),
                           ),
-                          alignment: Alignment.center,
-                          child: Text(_selectedIcon, style: const TextStyle(fontSize: 28)),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
-                          child: CustomTextField(label: 'Activity Name', hint: 'E.g. Deep Work, Workout', controller: _titleController),
+                          child: SuggestionTextField(
+                            controller: _titleController,
+                            labelText: 'Activity Name',
+                            hintText: 'E.g. Deep Work, Workout, Reading...',
+                            onSuggestionSelected: (name) {
+                              // Auto-focus description or update category if matched
+                            },
+                          ),
                         ),
                       ],
                     ),

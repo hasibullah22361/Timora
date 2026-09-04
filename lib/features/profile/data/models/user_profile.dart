@@ -120,6 +120,66 @@ class UserProfile {
     };
   }
 
+  Map<String, dynamic> toSupabaseMap() {
+    return {
+      'id': id,
+      'display_name': fullName,
+      'username': username,
+      'email': email,
+      'bio': bio,
+      'avatar_preset': avatarPreset,
+      'avatar_color_value': avatarColorValue,
+      'timezone': timezone,
+      'work_hours_start_minutes': workHoursStartMinutes,
+      'work_hours_end_minutes': workHoursEndMinutes,
+      'daily_goal_hours': dailyGoalHours,
+      'daily_task_goal': dailyTaskGoal,
+      'routine_preference': routinePreference,
+      'notifications_enabled': notificationsEnabled,
+      'theme_mode': themeMode.name,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+  }
+
+  factory UserProfile.fromSupabaseMap(Map<String, dynamic> map, {String? localImagePath}) {
+    ThemeMode mode = ThemeMode.system;
+    if (map['theme_mode'] != null) {
+      try {
+        mode = ThemeMode.values.firstWhere(
+          (m) => m.name == map['theme_mode'],
+          orElse: () => ThemeMode.system,
+        );
+      } catch (_) {}
+    }
+
+    return UserProfile(
+      id: map['id'] as String? ?? 'user_default',
+      fullName: (map['display_name'] as String?)?.isNotEmpty == true
+          ? map['display_name'] as String
+          : ((map['email'] as String?)?.split('@').first ?? 'Timora User'),
+      username: map['username'] as String? ?? 'user',
+      email: map['email'] as String? ?? 'user@timora.app',
+      bio: map['bio'] as String? ?? 'Optimizing time, building routines, and staying focused.',
+      avatarPreset: map['avatar_preset'] as String? ?? '⚡',
+      avatarColorValue: map['avatar_color_value'] as int? ?? 0xFF2563EB,
+      customImagePath: localImagePath,
+      timezone: map['timezone'] as String? ?? 'UTC+05:00 - Islamabad, Karachi',
+      workHoursStartMinutes: map['work_hours_start_minutes'] as int? ?? 540,
+      workHoursEndMinutes: map['work_hours_end_minutes'] as int? ?? 1080,
+      dailyGoalHours: (map['daily_goal_hours'] as num?)?.toDouble() ?? 6.0,
+      dailyTaskGoal: map['daily_task_goal'] as int? ?? 5,
+      routinePreference: map['routine_preference'] as String? ?? 'Time-blocking',
+      notificationsEnabled: map['notifications_enabled'] as bool? ?? true,
+      themeMode: mode,
+      createdAt: map['created_at'] != null
+          ? DateTime.tryParse(map['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: map['updated_at'] != null
+          ? DateTime.tryParse(map['updated_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     ThemeMode mode = ThemeMode.system;
     if (json['themeMode'] != null) {

@@ -1,13 +1,18 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../home/presentation/screens/home_screen.dart';
+import '../../../planner/presentation/screens/planner_screen.dart';
 import '../../../schedule/presentation/screens/schedule_screen.dart';
 import '../../../tasks/presentation/screens/tasks_screen.dart';
 import '../../../routine/presentation/screens/routines_screen.dart';
 import '../../../others/presentation/screens/others_screen.dart';
+import '../providers/navigation_provider.dart';
 import '../../../notifications/application/voice_announcement_service.dart';
 import '../../../schedule/data/repositories/schedule_repository.dart';
+import '../../../tasks/data/repositories/task_repository.dart';
+import '../../../widget/services/widget_update_service.dart';
 
 class MainLayoutScreen extends ConsumerStatefulWidget {
   const MainLayoutScreen({super.key});
@@ -16,12 +21,12 @@ class MainLayoutScreen extends ConsumerStatefulWidget {
   ConsumerState<MainLayoutScreen> createState() => _MainLayoutScreenState();
 }
 
-class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
-  int _currentIndex = 0;
+class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with WidgetsBindingObserver {
   DateTime? _lastBackPressTime;
 
   final List<Widget> _screens = [
     const HomeScreen(),
+    const PlannerScreen(),
     const ScheduleScreen(),
     const TasksScreen(),
     const RoutinesScreen(),
@@ -31,20 +36,49 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final voiceService = ref.read(voiceAnnouncementServiceProvider);
-      final scheduleRepo = ref.read(scheduleRepositoryProvider);
-      
-      voiceService.startScheduleMonitoring(() async {
-        final now = DateTime.now();
-        final date = DateTime(now.year, now.month, now.day);
-        return await scheduleRepo.getActivitiesForDate(date);
-      });
+      // Refresh Home Screen widgets on startup
+      _updateWidgets();
+
+      // On Android, scheduled speaking notifications are handled natively by
+      // AlarmManager + TimoraSpeakingService in all app states (foreground & background).
+      // On other platforms, fallback to in-app polling.
+      if (!Platform.isAndroid) {
+        final voiceService = ref.read(voiceAnnouncementServiceProvider);
+        final scheduleRepo = ref.read(scheduleRepositoryProvider);
+        final taskRepo = ref.read(taskRepositoryProvider);
+
+        voiceService.startScheduleMonitoring(
+          () async {
+            final now = DateTime.now();
+            final date = DateTime(now.year, now.month, now.day);
+            return await scheduleRepo.getActivitiesForDate(date);
+          },
+          getTasks: () async {
+            return await taskRepo.getTasks();
+          },
+        );
+      }
     });
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _updateWidgets();
+    }
+  }
+
+  void _updateWidgets() {
+    try {
+      ref.read(widgetUpdateServiceProvider).updateWidgets();
+    } catch (_) {}
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ref.read(voiceAnnouncementServiceProvider).stopScheduleMonitoring();
     super.dispose();
   }
@@ -52,11 +86,10 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
   void _handlePopInvoked(bool didPop) {
     if (didPop) return;
 
+    final currentIndex = ref.read(navigationIndexProvider);
     // If on a secondary tab, return to Home (Tab 0)
-    if (_currentIndex != 0) {
-      setState(() {
-        _currentIndex = 0;
-      });
+    if (currentIndex != 0) {
+      ref.read(navigationIndexProvider.notifier).state = 0;
       return;
     }
 
@@ -80,21 +113,20 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final currentIndex = ref.watch(navigationIndexProvider);
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) => _handlePopInvoked(didPop),
       child: Scaffold(
         body: IndexedStack(
-          index: _currentIndex,
+          index: currentIndex,
           children: _screens,
         ),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex,
+          selectedIndex: currentIndex,
           onDestinationSelected: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
+            ref.read(navigationIndexProvider.notifier).state = index;
           },
           backgroundColor: theme.colorScheme.surface,
           indicatorColor: theme.colorScheme.primary.withValues(alpha: 0.14),
@@ -103,6 +135,11 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home_rounded),
               label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.auto_stories_outlined),
+              selectedIcon: Icon(Icons.auto_stories_rounded),
+              label: 'Planner',
             ),
             NavigationDestination(
               icon: Icon(Icons.calendar_today_outlined),

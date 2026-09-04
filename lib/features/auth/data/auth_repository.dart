@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser, AuthState;
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase show AuthState;
 import 'package:uuid/uuid.dart';
 
 import 'models/auth_models.dart';
@@ -22,16 +24,37 @@ class AuthRepository {
 
   SupabaseClient get _client {
     if (_customClient != null) return _customClient!;
-    return Supabase.instance.client;
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      throw Exception(
+        'Supabase client is not initialized. Please ensure Supabase is configured before using authentication.',
+      );
+    }
   }
 
+  Stream<supabase.AuthState> get authStateChanges {
+    try {
+      return _client.auth.onAuthStateChange;
+    } catch (_) {
+      return const Stream.empty();
+    }
+  }
+
+  /// Returns the current session without rejecting expired tokens.
+  /// Supabase SDK automatically refreshes tokens, so we should not
+  /// reject sessions that appear expired — the SDK handles renewal.
   AuthSession? getCurrentSession() {
     try {
       final session = _client.auth.currentSession;
-      if (session == null || session.isExpired) {
-        return null;
-      }
-      final user = _client.auth.currentUser ?? session.user;
+      final user = _client.auth.currentUser;
+
+      // Prefer currentUser which is always available if session was restored
+      if (user == null) return null;
+
+      // If session is null but user exists, session might still be refreshing
+      // Return user info with a placeholder token — the SDK will refresh
+      final effectiveSession = session;
       final displayName = (user.userMetadata?['full_name'] as String?)?.trim() ??
           (user.userMetadata?['name'] as String?)?.trim() ??
           (user.email?.split('@').first ?? 'User');
@@ -45,11 +68,11 @@ class AuthRepository {
       );
 
       return AuthSession(
-        token: session.accessToken,
+        token: effectiveSession?.accessToken ?? '',
         user: authUser,
         createdAt: DateTime.now(),
-        expiresAt: session.expiresAt != null
-            ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
+        expiresAt: effectiveSession?.expiresAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(effectiveSession!.expiresAt! * 1000)
             : null,
       );
     } catch (_) {
@@ -126,6 +149,7 @@ class AuthRepository {
         email: normalizedEmail,
         password: password,
         data: {'full_name': cleanName},
+        emailRedirectTo: 'io.supabase.timora://auth-callback',
       );
 
       final user = res.user;
@@ -154,11 +178,17 @@ class AuthRepository {
         return AuthRegistrationResult(
           user: authUser,
           requiresEmailConfirmation: true,
-          message: 'Account created! Please check your email ($normalizedEmail) to confirm your account before signing in.',
+          message: 'Your Timora account has been created. Please check your email ($normalizedEmail) to verify your account before signing in.',
         );
       }
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
+      if (msg.contains('invalid api key') ||
+          msg.contains('apikey') ||
+          msg.contains('jwt') ||
+          msg.contains('api key')) {
+        throw Exception('Authentication service configuration error (Invalid API key). Please ensure your Supabase API credentials are configured correctly.');
+      }
       if (msg.contains('failed host lookup') ||
           msg.contains('network') ||
           msg.contains('socket') ||
@@ -225,6 +255,12 @@ class AuthRepository {
       return authUser;
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
+      if (msg.contains('invalid api key') ||
+          msg.contains('apikey') ||
+          msg.contains('jwt') ||
+          msg.contains('api key')) {
+        throw Exception('Authentication service configuration error (Invalid API key). Please ensure your Supabase API credentials are configured correctly.');
+      }
       if (msg.contains('failed host lookup') ||
           msg.contains('network') ||
           msg.contains('socket') ||
@@ -267,11 +303,47 @@ class AuthRepository {
     final normalizedEmail = email.trim().toLowerCase();
 
     try {
-      await _client.auth.resetPasswordForEmail(normalizedEmail);
+      await _client.auth.resetPasswordForEmail(
+        normalizedEmail,
+        redirectTo: 'io.supabase.timora://auth-callback',
+      );
     } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid api key') ||
+          msg.contains('apikey') ||
+          msg.contains('jwt') ||
+          msg.contains('api key')) {
+        throw Exception('Authentication service configuration error (Invalid API key). Please ensure your Supabase API credentials are configured correctly.');
+      }
       throw Exception(e.message);
     } catch (e) {
       throw Exception('Unable to send password reset email. Please check your internet connection and try again.');
+    }
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    if (newPassword.isEmpty) {
+      throw Exception('Please enter a new password.');
+    }
+    if (newPassword.length < 6) {
+      throw Exception('Password must be at least 6 characters.');
+    }
+
+    try {
+      await _client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid api key') ||
+          msg.contains('apikey') ||
+          msg.contains('jwt') ||
+          msg.contains('api key')) {
+        throw Exception('Authentication service configuration error (Invalid API key). Please ensure your Supabase API credentials are configured correctly.');
+      }
+      throw Exception(e.message);
+    } catch (e) {
+      throw Exception('Unable to update password. Please check your internet connection and try again.');
     }
   }
 
@@ -309,4 +381,69 @@ class AuthRepository {
       await _client.auth.signOut();
     } catch (_) {}
   }
+
+  /// Signs in with Google using native Google Sign-In + Supabase OAuth.
+  Future<AuthUser> signInWithGoogle() async {
+    try {
+      // Native Google Sign-In flow
+      const webClientId = String.fromEnvironment(
+        'GOOGLE_WEB_CLIENT_ID',
+        defaultValue: '',
+      );
+
+      final googleSignIn = GoogleSignIn(
+        serverClientId: webClientId.isNotEmpty ? webClientId : null,
+      );
+
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        throw Exception('Google sign-in was cancelled.');
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+
+      if (idToken == null) {
+        throw Exception('Unable to retrieve Google credentials. Please try again.');
+      }
+
+      // Sign in to Supabase with Google token
+      final res = await _client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      final user = res.user;
+      final session = res.session;
+
+      if (user == null || session == null) {
+        throw Exception('Unable to authenticate with Google. Please try again.');
+      }
+
+      final displayName = googleUser.displayName ??
+          (user.userMetadata?['full_name'] as String?)?.trim() ??
+          (user.userMetadata?['name'] as String?)?.trim() ??
+          (user.email?.split('@').first ?? 'User');
+
+      return AuthUser(
+        id: user.id,
+        email: user.email ?? googleUser.email,
+        name: displayName.isNotEmpty ? displayName : 'User',
+        isGuest: false,
+        createdAt: DateTime.tryParse(user.createdAt) ?? DateTime.now(),
+      );
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('network') || msg.contains('socket') || msg.contains('connection')) {
+        throw Exception('Unable to connect. Please check your internet connection and try again.');
+      }
+      throw Exception(e.message);
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Google sign-in failed. Please try again.');
+    }
+  }
 }
+

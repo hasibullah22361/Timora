@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/ai_models.dart';
 import '../../services/ai_service.dart';
+import '../../../notifications/application/voice_announcement_service.dart';
+import '../widgets/ai_action_confirmation_sheet.dart';
+import '../widgets/voice_input_sheet.dart';
 
 class AIAssistantScreen extends ConsumerStatefulWidget {
   const AIAssistantScreen({super.key});
@@ -340,13 +343,13 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
                             width: double.infinity,
                             child: FilledButton.icon(
                               icon: const Icon(Icons.playlist_add_check, size: 16),
-                              label: const Text('Apply to Tasks & Schedule'),
+                              label: const Text('Review & Apply Plan'),
                               onPressed: () async {
-                                await ref.read(aiActionServiceProvider).applyActions(msg.actionPayload!.actions);
-                                if (context.mounted) {
+                                final applied = await AIActionConfirmationSheet.show(context, msg.actionPayload!);
+                                if (applied == true && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Plan applied successfully to Tasks!'),
+                                      content: Text('Selected AI plan applied successfully!'),
                                       backgroundColor: Color(0xFF10B981),
                                     ),
                                   );
@@ -359,6 +362,39 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                  ],
+                  if (!isUser) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          ref.read(voiceAnnouncementServiceProvider).speakNotification(
+                            title: 'Timora AI',
+                            body: msg.content,
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.volume_up_rounded, size: 14, color: theme.colorScheme.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Read Aloud',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -383,6 +419,12 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
       ),
       child: Row(
         children: [
+          IconButton.outlined(
+            icon: const Icon(Icons.mic_rounded, size: 20),
+            tooltip: 'Voice Input',
+            onPressed: () => VoiceInputSheet.show(context),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: TextField(
               controller: _controller,

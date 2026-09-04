@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/cloud_models.dart';
-import '../../data/providers/mock_supabase_provider.dart';
 import '../../services/sync_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
 final cloudAccountProvider = StateProvider<CloudAccount?>((ref) {
   final authUser = ref.watch(currentUserProvider);
-  if (authUser != null) {
+  if (authUser != null && !authUser.isGuest) {
     return CloudAccount(
       userId: authUser.id,
       email: authUser.email,
@@ -33,30 +32,29 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    final currentAccount = ref.read(cloudAccountProvider);
-    if (currentAccount != null) {
-      ref.read(mockSupabaseProvider).setCurrentUser(currentAccount);
-    }
-  }
-
   void _handleSignIn() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email and password.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final provider = ref.read(mockSupabaseProvider);
-      final account = await provider.authenticate(
-        _emailController.text,
-        _passwordController.text,
-      );
-      ref.read(cloudAccountProvider.notifier).state = account;
-      provider.setCurrentUser(account);
-      // Start initial sync
-      await ref.read(syncServiceProvider).syncNow();
+      final success = await ref.read(authControllerProvider.notifier).login(email, password);
+      if (success) {
+        // Start initial sync
+        await ref.read(syncServiceProvider).syncNow();
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign In Failed: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign In Failed: $e'), backgroundColor: Colors.red),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -80,11 +78,17 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
     );
 
     if (confirm == true) {
-      final provider = ref.read(mockSupabaseProvider);
-      await provider.signOut();
+      await ref.read(authControllerProvider.notifier).logout();
       ref.read(cloudAccountProvider.notifier).state = null;
       ref.read(globalSyncStatusProvider.notifier).state = SyncStatus.offline;
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -98,6 +102,9 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
   }
 
   Widget _buildSignIn() {
+    final authState = ref.watch(authControllerProvider);
+    final displayedError = authState.errorMessage;
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -107,8 +114,31 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
           const SizedBox(height: 16),
           const Text('Enable Cloud Sync', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          const Text('Keep your Timora data safely backed up and synced across all your devices.', textAlign: TextAlign.center),
+          const Text('Keep your Timora data safely backed up and synced across all your devices with Supabase Cloud.', textAlign: TextAlign.center),
           const SizedBox(height: 32),
+          if (displayedError != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      displayedError,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           TextField(
             controller: _emailController,
             decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
@@ -125,8 +155,10 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
             width: double.infinity,
             height: 50,
             child: FilledButton(
-              onPressed: _isLoading ? null : _handleSignIn,
-              child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Sign In'),
+              onPressed: (_isLoading || authState.isLoading) ? null : _handleSignIn,
+              child: (_isLoading || authState.isLoading)
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text('Sign In to Supabase'),
             ),
           )
         ],
@@ -147,12 +179,11 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
         const Divider(),
         SwitchListTile(
           title: const Text('Cloud Sync Enabled'),
-          subtitle: const Text('Upload and download changes automatically'),
+          subtitle: const Text('Upload and download changes automatically to Supabase'),
           value: account.syncEnabled,
           onChanged: (val) {
             final updated = account.copyWith(syncEnabled: val);
             ref.read(cloudAccountProvider.notifier).state = updated;
-            ref.read(mockSupabaseProvider).setCurrentUser(updated);
             if (val) {
               ref.read(syncServiceProvider).syncNow();
             }
@@ -180,3 +211,4 @@ class _CloudAccountScreenState extends ConsumerState<CloudAccountScreen> {
     );
   }
 }
+

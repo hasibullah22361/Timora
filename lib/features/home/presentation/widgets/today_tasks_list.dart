@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../main_layout/presentation/providers/navigation_provider.dart';
 import '../../../tasks/presentation/providers/task_provider.dart';
 import '../../../tasks/data/models/task_model.dart';
+import '../screens/today_tasks_screen.dart';
 
 class TodayTasksList extends ConsumerWidget {
   const TodayTasksList({super.key});
@@ -26,8 +26,10 @@ class TodayTasksList extends ConsumerWidget {
             ),
             TextButton(
               onPressed: () {
-                // Navigate to Tasks tab (index 2 based on main layout)
-                ref.read(navigationIndexProvider.notifier).state = 2;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TodayTasksScreen()),
+                );
               },
               child: const Text('View All'),
             ),

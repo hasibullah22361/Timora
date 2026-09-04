@@ -8,10 +8,6 @@ final mockSupabaseProvider = Provider<MockSupabaseProvider>((ref) {
   return MockSupabaseProvider();
 });
 
-final cloudSyncProvider = Provider<CloudSyncProvider>((ref) {
-  return ref.watch(mockSupabaseProvider);
-});
-
 class MockSupabaseProvider implements CloudSyncProvider {
   CloudAccount? _currentUser;
   

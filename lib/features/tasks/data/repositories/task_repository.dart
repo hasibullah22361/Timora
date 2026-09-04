@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../core/providers/shared_prefs_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -23,7 +21,6 @@ class TaskRepository {
   final String? _userId;
   final List<TaskModel> _tasks = [];
   final List<SubtaskModel> _subtasks = [];
-  final _uuid = const Uuid();
 
   TaskRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
@@ -41,31 +38,30 @@ class TaskRepository {
     final tasksJson = _prefs.getString(_tasksKey);
     final subtasksJson = _prefs.getString(_subtasksKey);
 
-    if (tasksJson != null) {
+    _tasks.clear();
+    _subtasks.clear();
+
+    if (tasksJson != null && tasksJson.isNotEmpty) {
       try {
         final List<dynamic> decodedTasks = jsonDecode(tasksJson);
-        _tasks.clear();
         for (var item in decodedTasks) {
           _tasks.add(TaskModel.fromJson(item as Map<String, dynamic>));
-        }
-
-        if (subtasksJson != null) {
-          final List<dynamic> decodedSubtasks = jsonDecode(subtasksJson);
-          _subtasks.clear();
-          for (var item in decodedSubtasks) {
-            _subtasks.add(SubtaskModel.fromJson(item as Map<String, dynamic>));
-          }
-        }
-
-        if (_tasks.isNotEmpty) {
-          return;
         }
       } catch (_) {
         // Fallback on error
       }
     }
 
-    _seedData();
+    if (subtasksJson != null && subtasksJson.isNotEmpty) {
+      try {
+        final List<dynamic> decodedSubtasks = jsonDecode(subtasksJson);
+        for (var item in decodedSubtasks) {
+          _subtasks.add(SubtaskModel.fromJson(item as Map<String, dynamic>));
+        }
+      } catch (_) {
+        // Fallback on error
+      }
+    }
   }
 
   Future<void> _saveToStorage() async {
@@ -73,57 +69,6 @@ class TaskRepository {
     final subtasksJson = jsonEncode(_subtasks.map((s) => s.toJson()).toList());
     await _prefs.setString(_tasksKey, tasksJson);
     await _prefs.setString(_subtasksKey, subtasksJson);
-  }
-
-  void _seedData() {
-    final now = DateTime.now();
-    _tasks.add(
-      TaskModel(
-        id: _uuid.v4(),
-        title: 'Review weekly priorities and goals',
-        description: 'Check main objectives, roadmap, and schedule milestones.',
-        priority: TaskPriority.high,
-        category: 'Work',
-        dueDate: DateTime(now.year, now.month, now.day),
-        dueTime: const TimeOfDay(hour: 18, minute: 0),
-        createdAt: now.subtract(const Duration(days: 1)),
-      ),
-    );
-    _tasks.add(
-      TaskModel(
-        id: _uuid.v4(),
-        title: 'Complete key project deliverable',
-        description: 'Focus on primary deliverables and finalize draft.',
-        priority: TaskPriority.high,
-        category: 'Work',
-        dueDate: DateTime(now.year, now.month, now.day),
-        createdAt: now.subtract(const Duration(hours: 5)),
-      ),
-    );
-    _tasks.add(
-      TaskModel(
-        id: _uuid.v4(),
-        title: 'Read 20 pages of selected book',
-        status: TaskStatus.completed,
-        priority: TaskPriority.low,
-        category: 'Study',
-        dueDate: DateTime(now.year, now.month, now.day),
-        createdAt: now.subtract(const Duration(hours: 12)),
-        completedAt: now.subtract(const Duration(minutes: 30)),
-      ),
-    );
-    _tasks.add(
-      TaskModel(
-        id: _uuid.v4(),
-        title: 'Organize workspace & clear inbox',
-        status: TaskStatus.pending,
-        priority: TaskPriority.medium,
-        category: 'Productivity',
-        dueDate: now.subtract(const Duration(days: 1)),
-        createdAt: now.subtract(const Duration(days: 3)),
-      ),
-    );
-    _saveToStorage();
   }
 
   Future<List<TaskModel>> getTasks() async {
@@ -138,12 +83,82 @@ class TaskRepository {
     }
   }
 
+  // --- Dependency Management ---
+
+  /// Validates that adding [dependsOnIds] to [taskId] will not create a circular dependency
+  bool validateNoCircularDependencies(String taskId, List<String> dependsOnIds) {
+    if (dependsOnIds.contains(taskId)) return false;
+
+    final visited = <String>{};
+    final recursionStack = <String>{taskId};
+
+    bool hasCycle(String currentId) {
+      if (recursionStack.contains(currentId)) return true;
+      if (visited.contains(currentId)) return false;
+
+      visited.add(currentId);
+      recursionStack.add(currentId);
+
+      final task = _tasks.where((t) => t.id == currentId && !t.isDeleted).firstOrNull;
+      if (task != null) {
+        final dependencies = currentId == taskId ? dependsOnIds : task.dependsOnTaskIds;
+        for (final depId in dependencies) {
+          if (hasCycle(depId)) return true;
+        }
+      }
+
+      recursionStack.remove(currentId);
+      return false;
+    }
+
+    for (final depId in dependsOnIds) {
+      if (hasCycle(depId)) return false;
+    }
+
+    return true;
+  }
+
+  /// Checks if a task is currently blocked by incomplete prerequisite dependencies
+  bool isTaskBlocked(String taskId) {
+    final task = _tasks.where((t) => t.id == taskId && !t.isDeleted).firstOrNull;
+    if (task == null || task.dependsOnTaskIds.isEmpty) return false;
+
+    for (final depId in task.dependsOnTaskIds) {
+      final prerequisite = _tasks.where((t) => t.id == depId && !t.isDeleted).firstOrNull;
+      if (prerequisite != null && !prerequisite.isCompleted) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Returns prerequisite tasks for a given task
+  List<TaskModel> getPrerequisitesForTask(String taskId) {
+    final task = _tasks.where((t) => t.id == taskId && !t.isDeleted).firstOrNull;
+    if (task == null || task.dependsOnTaskIds.isEmpty) return [];
+
+    return _tasks.where((t) => task.dependsOnTaskIds.contains(t.id) && !t.isDeleted).toList();
+  }
+
+  /// Returns tasks that depend on this task
+  List<TaskModel> getDependentTasks(String taskId) {
+    return _tasks.where((t) => t.dependsOnTaskIds.contains(taskId) && !t.isDeleted).toList();
+  }
+
+  // --- CRUD Operations ---
+
   Future<void> createTask(TaskModel task) async {
+    if (!validateNoCircularDependencies(task.id, task.dependsOnTaskIds)) {
+      throw Exception('Circular dependency detected. Task cannot depend on itself or its dependents.');
+    }
     _tasks.add(task);
     await _saveToStorage();
   }
 
   Future<void> updateTask(TaskModel task) async {
+    if (!validateNoCircularDependencies(task.id, task.dependsOnTaskIds)) {
+      throw Exception('Circular dependency detected. Task cannot depend on itself or its dependents.');
+    }
     final index = _tasks.indexWhere((t) => t.id == task.id);
     if (index >= 0) {
       _tasks[index] = task.copyWith(updatedAt: DateTime.now());
@@ -200,4 +215,3 @@ class TaskRepository {
     return List.from(_subtasks);
   }
 }
-

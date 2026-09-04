@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 import 'package:timora/features/tasks/data/models/task_model.dart';
 import '../providers/task_provider.dart';
+import 'package:timora/core/widgets/suggestion_text_field.dart';
+import 'package:timora/features/tasks/data/repositories/task_repository.dart';
 import 'package:timora/features/goals/presentation/providers/goal_provider.dart';
 import 'package:timora/features/projects/presentation/providers/project_provider.dart';
 
@@ -57,6 +59,9 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
     'Other'
   ];
 
+  List<String> _dependsOnTaskIds = [];
+  int _estimatedDurationMinutes = 30;
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +82,8 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
       _selectedProjectId = widget.taskToEdit!.projectId;
       _selectedGoalId = widget.taskToEdit!.goalId;
       _selectedMilestoneId = widget.taskToEdit!.milestoneId;
+      _dependsOnTaskIds = List.from(widget.taskToEdit!.dependsOnTaskIds);
+      _estimatedDurationMinutes = widget.taskToEdit!.estimatedDurationMinutes ?? 30;
     } else {
       if (widget.initialScheduleActivityId != null) {
         _dueDate = DateTime.now();
@@ -105,8 +112,22 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
     if (!_formKey.currentState!.validate()) return;
 
     final isNew = widget.taskToEdit == null;
+    final taskId = isNew ? const Uuid().v4() : widget.taskToEdit!.id;
+
+    // Validate circular dependencies
+    final repo = ref.read(taskRepositoryProvider);
+    if (!repo.validateNoCircularDependencies(taskId, _dependsOnTaskIds)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Circular dependency detected. A task cannot depend on itself or its child.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final task = TaskModel(
-      id: isNew ? const Uuid().v4() : widget.taskToEdit!.id,
+      id: taskId,
       title: _titleController.text.trim(),
       description: _descController.text.trim(),
       notes: _notesController.text.trim(),
@@ -116,6 +137,8 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
       dueTime: _dueTime,
       reminderEnabled: _reminderEnabled,
       reminderMinutesBefore: _reminderMinutesBefore,
+      dependsOnTaskIds: _dependsOnTaskIds,
+      estimatedDurationMinutes: _estimatedDurationMinutes,
       scheduleActivityId: isNew
           ? widget.initialScheduleActivityId
           : widget.taskToEdit!.scheduleActivityId,
@@ -164,10 +187,11 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
               ),
               const SizedBox(height: 24),
 
-              TextFormField(
+              SuggestionTextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
-                    labelText: 'Task Title', border: OutlineInputBorder()),
+                labelText: 'Task Title',
+                hintText: 'e.g. Study AI, Review PR, Workout...',
+                prefixIcon: Icons.task_alt,
                 validator: (val) => val == null || val.trim().isEmpty
                     ? 'Title is required'
                     : null,
@@ -346,6 +370,10 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
               ],
 
               const SizedBox(height: 16),
+              // Prerequisite Dependencies Multi-select
+              _buildDependencySelector(),
+
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _notesController,
                 decoration: const InputDecoration(
@@ -407,6 +435,81 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
       },
       loading: () => const CircularProgressIndicator(),
       error: (_, __) => const Text('Error loading milestones'),
+    );
+  }
+
+  Widget _buildDependencySelector() {
+    final theme = Theme.of(context);
+    final allTasksAsync = ref.watch(allTasksProvider);
+    final currentId = widget.taskToEdit?.id;
+
+    return allTasksAsync.when(
+      data: (tasks) {
+        final candidateTasks = tasks.where((t) => t.id != currentId).toList();
+        if (candidateTasks.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.dividerColor),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.account_tree_outlined, size: 16, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Prerequisite Tasks (Dependencies)',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'This task will be marked as blocked until all selected prerequisite tasks are completed.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: candidateTasks.map((t) {
+                  final isSelected = _dependsOnTaskIds.contains(t.id);
+                  return FilterChip(
+                    label: Text(
+                      t.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        decoration: t.isCompleted ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _dependsOnTaskIds.add(t.id);
+                        } else {
+                          _dependsOnTaskIds.remove(t.id);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

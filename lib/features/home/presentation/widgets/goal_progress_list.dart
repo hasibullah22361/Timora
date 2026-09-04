@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../goals/presentation/providers/goal_provider.dart';
+import '../../../goals/presentation/screens/goals_screen.dart';
 
 class GoalProgressList extends ConsumerWidget {
   const GoalProgressList({super.key});
@@ -24,9 +25,10 @@ class GoalProgressList extends ConsumerWidget {
             ),
             TextButton(
               onPressed: () {
-                // Navigate to Goals tab (assuming index 3 for goals based on MainLayout structure)
-                // Note: since MainLayout is stateful without a provider for navigation right now, 
-                // this won't work perfectly until MainLayout is refactored, but it's here for completeness.
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const GoalsScreen()),
+                );
               },
               child: const Text('View All'),
             ),

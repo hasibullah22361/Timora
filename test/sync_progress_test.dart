@@ -7,6 +7,7 @@ import 'package:timora/core/providers/shared_prefs_provider.dart';
 import 'package:timora/features/auth/data/models/auth_models.dart';
 import 'package:timora/features/auth/presentation/providers/auth_provider.dart';
 import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
+import 'package:timora/features/cloud_sync/data/providers/cloud_sync_provider.dart';
 import 'package:timora/features/cloud_sync/data/providers/mock_supabase_provider.dart';
 import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
 import 'package:timora/features/cloud_sync/services/sync_service.dart';
@@ -36,6 +37,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        cloudSyncProvider.overrideWith((ref) => ref.watch(mockSupabaseProvider)),
         currentUserProvider.overrideWith((ref) => AuthUser(
               id: 'user_test_123',
               email: 'test@timora.com',

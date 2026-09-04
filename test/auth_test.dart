@@ -1,16 +1,18 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import 'package:timora/features/auth/data/auth_repository.dart';
 import 'package:timora/features/auth/presentation/providers/auth_provider.dart';
-import 'package:timora/features/profile/data/repositories/user_profile_repository.dart';
 import 'package:timora/features/tasks/data/models/task_model.dart';
 import 'package:timora/features/tasks/data/repositories/task_repository.dart';
 
 /// Test client that simulates Supabase Auth backend responses
 class FakeSupabaseAuthClient extends Fake implements supabase.GoTrueClient {
   final Map<String, Map<String, dynamic>> _registeredUsers = {};
+  final StreamController<supabase.AuthState> _authStateController =
+      StreamController<supabase.AuthState>.broadcast();
   supabase.Session? _activeSession;
   bool _simulateNetworkError = false;
   bool _requireEmailConfirmation = false;
@@ -23,11 +25,49 @@ class FakeSupabaseAuthClient extends Fake implements supabase.GoTrueClient {
     _simulateNetworkError = error;
   }
 
+  void emitAuthState(supabase.AuthChangeEvent event, supabase.Session? session) {
+    _authStateController.add(supabase.AuthState(event, session));
+  }
+
+  @override
+  Stream<supabase.AuthState> get onAuthStateChange => _authStateController.stream;
+
   @override
   supabase.Session? get currentSession => _activeSession;
 
   @override
   supabase.User? get currentUser => _activeSession?.user;
+
+  @override
+  Future<supabase.UserResponse> updateUser(
+    supabase.UserAttributes attributes, {
+    String? emailRedirectTo,
+  }) async {
+    if (_simulateNetworkError) {
+      throw const supabase.AuthException(
+        'Failed host lookup: lgjzjzbbhmiejuovgtol.supabase.co',
+        statusCode: '0',
+      );
+    }
+    if (_activeSession == null) {
+      throw const supabase.AuthException('Not authenticated', statusCode: '401');
+    }
+    final user = _activeSession!.user;
+    if (attributes.password != null) {
+      final email = user.email;
+      if (email != null && _registeredUsers.containsKey(email)) {
+        _registeredUsers[email]!['password'] = attributes.password!;
+      }
+    }
+    return supabase.UserResponse.fromJson({
+      'id': user.id,
+      'app_metadata': user.appMetadata,
+      'user_metadata': user.userMetadata,
+      'aud': user.aud,
+      'email': user.email,
+      'created_at': user.createdAt,
+    });
+  }
 
   @override
   Future<supabase.AuthResponse> signUp({
@@ -41,7 +81,7 @@ class FakeSupabaseAuthClient extends Fake implements supabase.GoTrueClient {
   }) async {
     if (_simulateNetworkError) {
       throw const supabase.AuthException(
-        'Failed host lookup: zwrlfslghwkjhuzcujsw.supabase.co',
+        'Failed host lookup: lgjzjzbbhmiejuovgtol.supabase.co',
         statusCode: '0',
       );
     }
@@ -91,7 +131,7 @@ class FakeSupabaseAuthClient extends Fake implements supabase.GoTrueClient {
   }) async {
     if (_simulateNetworkError) {
       throw const supabase.AuthException(
-        'Failed host lookup: zwrlfslghwkjhuzcujsw.supabase.co',
+        'Failed host lookup: lgjzjzbbhmiejuovgtol.supabase.co',
         statusCode: '0',
       );
     }
@@ -131,7 +171,7 @@ class FakeSupabaseAuthClient extends Fake implements supabase.GoTrueClient {
   }) async {
     if (_simulateNetworkError) {
       throw const supabase.AuthException(
-        'Failed host lookup: zwrlfslghwkjhuzcujsw.supabase.co',
+        'Failed host lookup: lgjzjzbbhmiejuovgtol.supabase.co',
         statusCode: '0',
       );
     }
@@ -437,5 +477,68 @@ void main() {
       expect(controller.state.isAuthenticated, isFalse);
       expect(controller.state.user, isNull);
     });
+
+    test('TEST 17: Update password updates credentials in Supabase Auth', () async {
+      await authRepo.register(
+        name: 'Grace Hopper',
+        email: 'grace@example.com',
+        password: 'initialPassword1',
+        confirmPassword: 'initialPassword1',
+      );
+
+      // Update password online
+      await authRepo.updatePassword('newSecretPassword2');
+
+      // Logout
+      await authRepo.logout();
+      expect(authRepo.getCurrentSession(), isNull);
+
+      // Old password fails
+      expect(
+        () async => await authRepo.login(
+          email: 'grace@example.com',
+          password: 'initialPassword1',
+        ),
+        throwsA(predicate((e) => e.toString().contains('Incorrect email or password.'))),
+      );
+
+      // New password succeeds
+      final user = await authRepo.login(
+        email: 'grace@example.com',
+        password: 'newSecretPassword2',
+      );
+      expect(user.email, 'grace@example.com');
+      expect(authRepo.getCurrentSession(), isNotNull);
+    });
+
+    test('TEST 18: Password recovery state transitions and updatePassword in AuthController', () async {
+      final controller = AuthController(authRepo);
+
+      // User registered
+      await controller.register(
+        name: 'Henry Ford',
+        email: 'henry@example.com',
+        password: 'oldPassword123',
+        confirmPassword: 'oldPassword123',
+      );
+
+      // Simulate Supabase emitting passwordRecovery event on link click
+      (testClient.auth as FakeSupabaseAuthClient).emitAuthState(
+        supabase.AuthChangeEvent.passwordRecovery,
+        testClient.auth.currentSession,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      expect(controller.state.isPasswordRecovery, isTrue);
+
+      // Execute update password
+      final updateSuccess = await controller.updatePassword('brandNewPassword456');
+      expect(updateSuccess, isTrue);
+      expect(controller.state.isPasswordRecovery, isFalse);
+      expect(controller.state.successMessage?.contains('successfully'), isTrue);
+
+      controller.dispose();
+    });
   });
 }
+

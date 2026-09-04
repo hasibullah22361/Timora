@@ -6,6 +6,8 @@ import 'package:timora/features/schedule/presentation/widgets/activity_picker_sh
 import '../providers/schedule_provider.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../core/widgets/suggestion_text_field.dart';
+import '../../../../core/widgets/icon_picker.dart';
 
 class AddEditActivitySheet extends ConsumerStatefulWidget {
   final ScheduleActivity? activityToEdit;
@@ -189,22 +191,31 @@ class _AddEditActivitySheetState extends ConsumerState<AddEditActivitySheet> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 54,
-                          height: 54,
-                          decoration: BoxDecoration(
-                            color: _selectedColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: _selectedColor, width: 2),
+                        InkWell(
+                          onTap: () async {
+                            final chosen = await IconPickerSheet.show(context, currentIcon: _selectedIcon);
+                            if (chosen != null) {
+                              setState(() => _selectedIcon = chosen);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: _selectedColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: _selectedColor, width: 2),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(_selectedIcon, style: const TextStyle(fontSize: 28)),
                           ),
-                          alignment: Alignment.center,
-                          child: Text(_selectedIcon, style: const TextStyle(fontSize: 28)),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
-                          child: CustomTextField(
-                            label: 'Title',
-                            hint: 'E.g. Morning Workout, Deep Work',
+                          child: SuggestionTextField(
+                            labelText: 'Title',
+                            hintText: 'E.g. Morning Workout, Deep Work',
                             controller: _titleController,
                           ),
                         ),

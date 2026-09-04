@@ -21,6 +21,7 @@ import 'package:timora/features/cloud_sync/presentation/widgets/sync_indicator_w
 import 'package:timora/features/profile/presentation/providers/user_profile_provider.dart';
 import 'package:timora/features/profile/presentation/screens/profile_screen.dart';
 import 'package:timora/features/ai_assistant/presentation/widgets/timora_ai_button.dart';
+import 'package:timora/features/quick_add/presentation/widgets/quick_add_sheet.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -147,6 +148,40 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+
+              // Quick Add Bar
+              InkWell(
+                onTap: () => QuickAddSheet.show(context),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.auto_awesome, color: theme.colorScheme.primary, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Quick Add with Timora AI...',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.mic, color: theme.colorScheme.primary, size: 20),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
               

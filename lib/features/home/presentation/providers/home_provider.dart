@@ -48,7 +48,7 @@ final formattedTimeProvider = Provider<String>((ref) {
 });
 
 final dailyScheduleProvider = FutureProvider<List<ScheduleActivity>>((ref) async {
-  final now = ref.watch(currentTimeProvider);
+  final now = DateTime.now();
   final date = DateTime(now.year, now.month, now.day);
   final scheduler = ref.watch(routineSchedulerServiceProvider);
   await scheduler.generateScheduleForDate(date);

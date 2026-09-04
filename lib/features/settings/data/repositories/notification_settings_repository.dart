@@ -84,4 +84,7 @@ class NotificationSettingsRepository {
 
   bool get spokenAnnouncementsEnabled => _prefs.getBool('spokenAnnouncementsEnabled') ?? true;
   Future<void> setSpokenAnnouncementsEnabled(bool value) => _prefs.setBool('spokenAnnouncementsEnabled', value);
+
+  double get speakingSpeed => _prefs.getDouble('speakingSpeed') ?? 1.0;
+  Future<void> setSpeakingSpeed(double value) => _prefs.setDouble('speakingSpeed', value.clamp(0.1, 2.0));
 }

@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
-
 import '../../../../core/providers/shared_prefs_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../models/project_model.dart';
@@ -19,7 +17,6 @@ class ProjectRepository {
   final SharedPreferences _prefs;
   final String? _userId;
   final List<ProjectModel> _projects = [];
-  final _uuid = const Uuid();
 
   ProjectRepository(this._prefs, {String? userId}) : _userId = userId {
     _loadFromStorage();
@@ -31,41 +28,20 @@ class ProjectRepository {
 
   void _loadFromStorage() {
     final jsonString = _prefs.getString(_storageKey);
-    if (jsonString != null) {
+    _projects.clear();
+    if (jsonString != null && jsonString.isNotEmpty) {
       try {
         final List<dynamic> decoded = jsonDecode(jsonString);
-        _projects.clear();
         for (var item in decoded) {
           _projects.add(ProjectModel.fromJson(item as Map<String, dynamic>));
         }
-        if (_projects.isNotEmpty) {
-          return;
-        }
       } catch (_) {}
     }
-    _seedData();
   }
 
   Future<void> _saveToStorage() async {
     final jsonString = jsonEncode(_projects.map((p) => p.toJson()).toList());
     await _prefs.setString(_storageKey, jsonString);
-  }
-
-  void _seedData() {
-    final now = DateTime.now();
-    _projects.add(
-      ProjectModel(
-        id: _uuid.v4(),
-        title: 'Personal Portfolio & Brand',
-        description: 'Design and launch responsive personal website and showcase work.',
-        status: ProjectStatus.active,
-        priority: ProjectPriority.high,
-        category: 'Work',
-        targetDate: now.add(const Duration(days: 30)),
-        createdAt: now.subtract(const Duration(days: 5)),
-      ),
-    );
-    _saveToStorage();
   }
 
   Future<List<ProjectModel>> getProjects() async {

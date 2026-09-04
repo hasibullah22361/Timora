@@ -33,6 +33,10 @@ class TaskDetailsScreen extends ConsumerWidget {
 
     final isCompleted = task.status == TaskStatus.completed;
 
+    final isBlocked = ref.watch(isTaskBlockedProvider(task.id));
+    final prerequisites = ref.watch(taskPrerequisitesProvider(task.id));
+    final dependents = ref.watch(taskDependentsProvider(task.id));
+
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
@@ -106,6 +110,35 @@ class TaskDetailsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          // Blocked Alert Banner
+          if (isBlocked && !isCompleted) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFF59E0B)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock_clock, color: Color(0xFFD97706), size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'This task is blocked because prerequisite tasks are still pending.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
           Row(
             children: [
               Checkbox(
@@ -138,6 +171,60 @@ class TaskDetailsScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(task.description, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 24),
+          ],
+
+          // Prerequisite Dependencies List
+          if (prerequisites.isNotEmpty) ...[
+            Text('Prerequisites', style: theme.textTheme.labelSmall),
+            const SizedBox(height: 8),
+            ...prerequisites.map((p) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(
+                      p.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                      color: p.isCompleted ? const Color(0xFF10B981) : Colors.orange,
+                    ),
+                    title: Text(
+                      p.title,
+                      style: TextStyle(
+                        decoration: p.isCompleted ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, size: 18),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => TaskDetailsScreen(taskId: p.id),
+                        ),
+                      );
+                    },
+                  ),
+                )),
+            const SizedBox(height: 16),
+          ],
+
+          // Dependent Tasks List
+          if (dependents.isNotEmpty) ...[
+            Text('Blocks Following Tasks', style: theme.textTheme.labelSmall),
+            const SizedBox(height: 8),
+            ...dependents.map((d) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: const Icon(Icons.arrow_forward, color: Color(0xFF6366F1)),
+                    title: Text(d.title),
+                    trailing: const Icon(Icons.chevron_right, size: 18),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => TaskDetailsScreen(taskId: d.id),
+                        ),
+                      );
+                    },
+                  ),
+                )),
+            const SizedBox(height: 16),
           ],
           
           Row(

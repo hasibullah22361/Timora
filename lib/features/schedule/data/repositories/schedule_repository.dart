@@ -91,5 +91,11 @@ class ScheduleRepository {
     _activities.removeWhere((a) => a.id == id);
     await _saveToStorage();
   }
+
+  Future<void> deleteActivitiesForRoutineBlockIds(List<String> blockIds) async {
+    if (blockIds.isEmpty) return;
+    _activities.removeWhere((a) => a.routineBlockId != null && blockIds.contains(a.routineBlockId));
+    await _saveToStorage();
+  }
 }
 

@@ -1,4 +1,10 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/cloud_models.dart';
+import 'supabase_sync_provider.dart';
+
+final cloudSyncProvider = Provider<CloudSyncProvider>((ref) {
+  return ref.watch(supabaseSyncProvider);
+});
 
 abstract class CloudSyncProvider {
   /// Authenticates the user and returns their CloudAccount info

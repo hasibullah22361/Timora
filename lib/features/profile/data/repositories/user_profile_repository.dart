@@ -1,15 +1,31 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
 
 class UserProfileRepository {
   static const String _defaultProfileKey = 'timora_user_profile_v1';
   final SharedPreferences _prefs;
+  final SupabaseClient? _customClient;
 
-  UserProfileRepository(this._prefs);
+  UserProfileRepository(this._prefs, {SupabaseClient? supabaseClient})
+      : _customClient = supabaseClient;
+
+  SupabaseClient? get _client {
+    if (_customClient != null) return _customClient;
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
 
   String _getUserProfileKey(String? userId) {
-    if (userId == null || userId.isEmpty || userId == 'user_default' || userId == 'usr_timora_1') {
+    if (userId == null ||
+        userId.isEmpty ||
+        userId == 'user_default' ||
+        userId == 'usr_timora_1') {
       return _defaultProfileKey;
     }
     return 'timora_user_profile_${userId}_v1';
@@ -62,10 +78,52 @@ class UserProfileRepository {
     return initialProfile;
   }
 
+  Future<UserProfile?> fetchProfileFromCloud(String userId) async {
+    final client = _client;
+    if (client == null) return null;
+
+    try {
+      final res = await client
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (res != null) {
+        final local = loadProfile(userId: userId);
+        final profile = UserProfile.fromSupabaseMap(
+          res,
+          localImagePath: local.customImagePath,
+        );
+        await saveProfile(profile, userId: userId);
+        return profile;
+      }
+    } catch (e) {
+      debugPrint('Cloud profile fetch notice: $e');
+    }
+    return null;
+  }
+
   Future<void> saveProfile(UserProfile profile, {String? userId}) async {
     final key = _getUserProfileKey(userId ?? profile.id);
     final jsonStr = jsonEncode(profile.toJson());
     await _prefs.setString(key, jsonStr);
+
+    // Sync to cloud if user is authenticated and not guest
+    final currentUserId = userId ?? profile.id;
+    if (currentUserId.isNotEmpty &&
+        !currentUserId.startsWith('guest_') &&
+        currentUserId != 'usr_timora_1' &&
+        currentUserId != 'user_default') {
+      final client = _client;
+      if (client != null) {
+        try {
+          await client.from('profiles').upsert(profile.toSupabaseMap());
+        } catch (e) {
+          debugPrint('Cloud profile upsert notice: $e');
+        }
+      }
+    }
   }
 
   Future<void> clearProfile({String? userId}) async {

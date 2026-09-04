@@ -6,6 +6,9 @@ import '../../../analytics/presentation/screens/analytics_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../../ai_assistant/presentation/screens/ai_assistant_screen.dart';
+import '../../../focus/presentation/screens/focus_screen.dart';
+import '../../../habits/presentation/screens/habits_screen.dart';
+import '../../../diary/presentation/screens/diary_screen.dart';
 import '../../../profile/presentation/providers/user_profile_provider.dart';
 
 class OthersScreen extends ConsumerWidget {
@@ -27,6 +30,45 @@ class OthersScreen extends ConsumerWidget {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const AIAssistantScreen()),
+          );
+        },
+      ),
+      _OthersItem(
+        title: 'Focus Mode & Timer',
+        description: 'Pomodoro timer, flow state blocks, and ambient background sounds',
+        icon: Icons.timer_outlined,
+        color: const Color(0xFFEC4899),
+        badgeText: 'Flow State',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FocusScreen()),
+          );
+        },
+      ),
+      _OthersItem(
+        title: 'Habits & Streaks',
+        description: 'Build atomic habits, monitor streak records, and view consistency heatmaps',
+        icon: Icons.local_fire_department_outlined,
+        color: const Color(0xFFF97316),
+        badgeText: 'Streaks',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HabitsScreen()),
+          );
+        },
+      ),
+      _OthersItem(
+        title: 'Timora Diary & Reflection',
+        description: 'Log daily wins, track mood & energy levels, and practice gratitude',
+        icon: Icons.menu_book_outlined,
+        color: const Color(0xFF06B6D4),
+        badgeText: 'Journal',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const DiaryScreen()),
           );
         },
       ),

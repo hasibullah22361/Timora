@@ -19,15 +19,14 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
 
 final dailyPlanProvider = FutureProvider.family<DailyPlanModel, DateTime>((ref, date) async {
   final repo = ref.watch(dailyPlanRepositoryProvider);
-  var plan = await repo.getPlanForDate(date);
+  final plan = await repo.getPlanForDate(date);
   
   if (plan == null) {
-    plan = DailyPlanModel(
+    return DailyPlanModel(
       id: const Uuid().v4(),
       date: date,
       createdAt: DateTime.now(),
     );
-    await repo.savePlan(plan);
   }
   return plan;
 });
@@ -78,26 +77,29 @@ final timelineProvider = FutureProvider.family<List<TimelineItem>, DateTime>((re
   }
   
   // 3. Fetch Planned Task Blocks
-  final plan = await ref.watch(dailyPlanProvider(date).future);
-  final blocks = await ref.watch(plannedBlocksProvider(plan.id).future);
-  final tasks = await ref.watch(allTasksProvider.future);
-  
-  for (var b in blocks) {
-    final task = tasks.where((t) => t.id == b.taskId).firstOrNull;
-    final taskTitle = task?.title ?? 'Planned Task';
-    final isCompleted = b.status == PlannedBlockStatus.completed || (task?.isCompleted ?? false);
-    items.add(TimelineItem(
-      id: 'block_${b.id}',
-      sourceId: b.id,
-      type: TimelineItemType.block,
-      title: taskTitle,
-      subtitle: 'Planned task',
-      startTime: b.startTime,
-      endTime: b.endTime,
-      color: Colors.blue,
-      icon: '📝',
-      isCompleted: isCompleted,
-    ));
+  final repo = ref.watch(dailyPlanRepositoryProvider);
+  final persistedPlan = await repo.getPlanForDate(date);
+  if (persistedPlan != null) {
+    final blocks = await repo.getBlocksForDate(persistedPlan.id);
+    final tasks = await ref.watch(allTasksProvider.future);
+    
+    for (var b in blocks) {
+      final task = tasks.where((t) => t.id == b.taskId).firstOrNull;
+      final taskTitle = task?.title ?? 'Planned Task';
+      final isCompleted = b.status == PlannedBlockStatus.completed || (task?.isCompleted ?? false);
+      items.add(TimelineItem(
+        id: 'block_${b.id}',
+        sourceId: b.id,
+        type: TimelineItemType.block,
+        title: taskTitle,
+        subtitle: 'Planned task',
+        startTime: b.startTime,
+        endTime: b.endTime,
+        color: Colors.blue,
+        icon: '📝',
+        isCompleted: isCompleted,
+      ));
+    }
   }
   
   // Sort chronologically
@@ -117,32 +119,65 @@ class DailyPlanNotifier extends StateNotifier<AsyncValue<void>> {
   DailyPlanNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
 
   Future<void> addPlannedBlock(PlannedTaskBlockModel block, DateTime date) async {
+    // Ensure plan is persisted
+    var plan = await _repo.getPlanForDate(date);
+    if (plan == null) {
+      plan = DailyPlanModel(
+        id: block.dailyPlanId,
+        date: date,
+        createdAt: DateTime.now(),
+      );
+      await _repo.savePlan(plan);
+      await _ref.read(syncRepositoryProvider).enqueueChange(
+        entityType: 'daily_plans',
+        entityId: plan.id,
+        operation: SyncOperation.create,
+      );
+    }
+
     await _repo.saveBlock(block);
     await _ref.read(syncRepositoryProvider).enqueueChange(
-      entityType: 'daily_plan_blocks',
+      entityType: 'planned_task_blocks',
       entityId: block.id,
       operation: SyncOperation.create,
     );
-    final plan = await _repo.getPlanForDate(date);
-    if (plan != null) {
-      _ref.invalidate(plannedBlocksProvider(plan.id));
-      _ref.invalidate(timelineProvider(date));
-    }
+    
+    _ref.invalidate(dailyPlanProvider(date));
+    _ref.invalidate(plannedBlocksProvider(plan.id));
+    _ref.invalidate(timelineProvider(date));
     _ref.read(syncServiceProvider).autoSync();
   }
 
   Future<void> deletePlannedBlock(String blockId, DateTime date) async {
     await _repo.deleteBlock(blockId);
     await _ref.read(syncRepositoryProvider).enqueueChange(
-      entityType: 'daily_plan_blocks',
+      entityType: 'planned_task_blocks',
       entityId: blockId,
       operation: SyncOperation.delete,
     );
     final plan = await _repo.getPlanForDate(date);
     if (plan != null) {
+      _ref.invalidate(dailyPlanProvider(date));
       _ref.invalidate(plannedBlocksProvider(plan.id));
       _ref.invalidate(timelineProvider(date));
     }
+    _ref.read(syncServiceProvider).autoSync();
+  }
+
+  Future<void> deleteDayPlan(DateTime date) async {
+    final deletedPlan = await _repo.deletePlanForDate(date);
+    if (deletedPlan != null) {
+      await _ref.read(syncRepositoryProvider).enqueueChange(
+        entityType: 'daily_plans',
+        entityId: deletedPlan.id,
+        operation: SyncOperation.delete,
+      );
+    }
+    _ref.invalidate(dailyPlanProvider(date));
+    if (deletedPlan != null) {
+      _ref.invalidate(plannedBlocksProvider(deletedPlan.id));
+    }
+    _ref.invalidate(timelineProvider(date));
     _ref.read(syncServiceProvider).autoSync();
   }
 }

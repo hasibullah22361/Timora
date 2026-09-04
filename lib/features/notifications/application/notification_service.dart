@@ -9,6 +9,11 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService();
 });
 
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) {
+  // Background isolate notification action handler — safe, no UI calls
+}
+
 typedef NotificationResponseCallback = void Function(String? payload);
 
 class NotificationService {
@@ -36,6 +41,7 @@ class NotificationService {
           onNotificationResponse?.call(response.payload);
         }
       },
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
     await _createChannels();
@@ -46,6 +52,7 @@ class NotificationService {
   Future<void> _createChannels() async {
     if (!Platform.isAndroid) return;
 
+    // Channel for routine/schedule reminders that should play a sound
     const routineChannel = AndroidNotificationChannel(
       'timora_routine',
       'Timora Routine',
@@ -55,6 +62,7 @@ class NotificationService {
       enableVibration: true,
     );
 
+    // Channel for daily planning reminders
     const dailyChannel = AndroidNotificationChannel(
       'timora_daily',
       'Timora Daily',
@@ -64,16 +72,23 @@ class NotificationService {
       enableVibration: true,
     );
 
+    // Silent channel — used when TTS will speak instead of the notification sound.
+    // No sound, no vibration; only a visual notification bar entry.
+    const voiceChannel = AndroidNotificationChannel(
+      'timora_voice',
+      'Timora Voice Alerts',
+      description: 'Silent visual notification accompanying spoken alerts',
+      importance: Importance.low,
+      playSound: false,
+      enableVibration: false,
+    );
+
     final androidImplementation = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
 
-    await androidImplementation?.createNotificationChannel(
-      routineChannel,
-    );
-
-    await androidImplementation?.createNotificationChannel(
-      dailyChannel,
-    );
+    await androidImplementation?.createNotificationChannel(routineChannel);
+    await androidImplementation?.createNotificationChannel(dailyChannel);
+    await androidImplementation?.createNotificationChannel(voiceChannel);
   }
 
   Future<bool> requestPermission() async {
@@ -82,9 +97,7 @@ class NotificationService {
     final androidImplementation = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
 
-    if (androidImplementation == null) {
-      return false;
-    }
+    if (androidImplementation == null) return false;
 
     final granted =
         await androidImplementation.requestNotificationsPermission();
@@ -93,7 +106,7 @@ class NotificationService {
     try {
       await androidImplementation.requestExactAlarmsPermission();
     } catch (e) {
-      debugPrint('Exact alarms permission notice: $e');
+      debugPrint('[TimoraNotif] Exact alarms permission notice: $e');
     }
 
     return granted ?? false;
@@ -106,7 +119,6 @@ class NotificationService {
         AndroidFlutterLocalNotificationsPlugin>();
 
     final granted = await androidImplementation?.areNotificationsEnabled();
-
     return granted ?? false;
   }
 
@@ -115,23 +127,47 @@ class NotificationService {
     bool playSound = true,
     bool enableVibration = true,
   }) {
-    final isRoutine = channelId == 'timora_routine';
+    String channelName;
+    String channelDescription;
+    Importance importance;
+    Priority priority;
+
+    switch (channelId) {
+      case 'timora_routine':
+        channelName = 'Timora Routine';
+        channelDescription = 'Notifications for activity start and end times';
+        importance = Importance.max;
+        priority = Priority.high;
+        break;
+      case 'timora_voice':
+        channelName = 'Timora Voice Alerts';
+        channelDescription = 'Silent visual notification accompanying spoken alerts';
+        importance = Importance.low;
+        priority = Priority.low;
+        playSound = false;
+        enableVibration = false;
+        break;
+      default: // timora_daily
+        channelName = 'Timora Daily';
+        channelDescription = 'Daily planning and review reminders';
+        importance = Importance.high;
+        priority = Priority.defaultPriority;
+    }
 
     return NotificationDetails(
       android: AndroidNotificationDetails(
         channelId,
-        isRoutine ? 'Timora Routine' : 'Timora Daily',
-        channelDescription: isRoutine
-            ? 'Notifications for activity start and end times'
-            : 'Daily planning and review reminders',
-        importance: isRoutine ? Importance.max : Importance.high,
-        priority: isRoutine ? Priority.high : Priority.defaultPriority,
+        channelName,
+        channelDescription: channelDescription,
+        importance: importance,
+        priority: priority,
         playSound: playSound,
         enableVibration: enableVibration,
       ),
     );
   }
 
+  /// Show an immediate notification with sound (for standard reminders).
   Future<void> showImmediateNotification(
     int id,
     String title,
@@ -147,13 +183,36 @@ class NotificationService {
       enableVibration: enableVibration,
     );
 
-    await _plugin.show(
-      id: id,
-      title: title,
-      body: body,
-      notificationDetails: details,
-      payload: payload,
-    );
+    try {
+      await _plugin.show(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
+  /// Show a silent visual notification — to be paired with TTS speech.
+  /// Does NOT play the default Android notification sound.
+  Future<void> showSilentNotification(
+    int id,
+    String title,
+    String body, {
+    String? payload,
+  }) async {
+    final details = _notificationDetails('timora_voice');
+
+    try {
+      await _plugin.show(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
+    } catch (_) {}
   }
 
   Future<void> scheduleNotification(
@@ -166,9 +225,7 @@ class NotificationService {
     bool playSound = true,
     bool enableVibration = true,
   }) async {
-    if (scheduledDate.isBefore(DateTime.now())) {
-      return;
-    }
+    if (scheduledDate.isBefore(DateTime.now())) return;
 
     final details = _notificationDetails(
       channelId,
@@ -176,10 +233,7 @@ class NotificationService {
       enableVibration: enableVibration,
     );
 
-    final scheduledTime = tz.TZDateTime.from(
-      scheduledDate,
-      tz.local,
-    );
+    final scheduledTime = tz.TZDateTime.from(scheduledDate, tz.local);
 
     try {
       await _plugin.zonedSchedule(

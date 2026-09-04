@@ -1,9 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:label="Timora"
@@ -30,6 +35,19 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Deep linking for Supabase Auth redirect (password reset, email confirmation) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="io.supabase.timora" android:host="auth-callback" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="timora" android:host="login-callback" />
+            </intent-filter>
         </activity>
 
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
@@ -40,6 +58,71 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
+        </receiver>
+
+        <!-- Timora Native Speaking Receiver: receives AlarmManager broadcasts and bridges to speaking service.
+             Works in all app states — no Flutter engine required. -->
+        <receiver
+            android:name=".TimoraSpeakingReceiver"
+            android:exported="false" />
+
+        <!-- Timora Speaking Service: Foreground Service holding WakeLock and executing native Android TTS.
+             Runs with mediaPlayback type, guarantees CPU stays awake and audio plays when screen is off/locked. -->
+        <service
+            android:name=".TimoraSpeakingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Timora Boot Receiver: re-registers speaking alarms after device reboot.
+             Android clears AlarmManager alarms on reboot; this receiver restores them. -->
+        <receiver
+            android:name=".TimoraBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Timora Small Widget (2x2) -->
+        <receiver
+            android:name=".TimoraSmallWidgetProvider"
+            android:exported="true"
+            android:label="Timora Small">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/timora_widget_small_info" />
+        </receiver>
+
+        <!-- Timora Medium Widget (4x2) -->
+        <receiver
+            android:name=".TimoraMediumWidgetProvider"
+            android:exported="true"
+            android:label="Timora Medium">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/timora_widget_medium_info" />
+        </receiver>
+
+        <!-- Timora Large Widget (4x4) -->
+        <receiver
+            android:name=".TimoraLargeWidgetProvider"
+            android:exported="true"
+            android:label="Timora Large">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/timora_widget_large_info" />
         </receiver>
 
         <!-- Don't delete the meta-data below.

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
+import 'package:timora/features/routine/data/models/routine_template.dart';
 import '../providers/routine_provider.dart';
 import 'routine_details_screen.dart';
 import 'add_edit_routine_sheet.dart';
@@ -16,6 +18,34 @@ class RoutinesScreen extends ConsumerWidget {
     return days.map((d) => dayMap[d]).join(', ');
   }
 
+  void _showTemplatesModal(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _RoutineTemplatesSheet(
+        onTemplateSelected: (template) async {
+          const uuid = Uuid();
+          final routineId = uuid.v4();
+          final routine = template.instantiateRoutine(routineId);
+          final blocks = template.instantiateBlocks(routineId);
+
+          await ref.read(routineNotifierProvider).addRoutine(routine, blocks);
+          if (context.mounted) {
+            Navigator.pop(ctx);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Added "${template.title}" routine with ${blocks.length} time blocks!'),
+                backgroundColor: const Color(0xFF10B981),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -25,6 +55,13 @@ class RoutinesScreen extends ConsumerWidget {
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Routines', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.dashboard_customize_outlined),
+            tooltip: 'Routine Templates',
+            onPressed: () => _showTemplatesModal(context, ref),
+          ),
+        ],
       ),
       body: SafeArea(
         child: routinesAsync.when(
@@ -32,7 +69,7 @@ class RoutinesScreen extends ConsumerWidget {
           error: (error, stack) => Center(child: Text('Error: $error')),
           data: (routines) {
             if (routines.isEmpty) {
-              return _buildEmptyState(context);
+              return _buildEmptyState(context, ref);
             }
             return ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -62,54 +99,46 @@ class RoutinesScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              Text(routine.icon, style: const TextStyle(fontSize: 32)),
-                              const SizedBox(width: 16),
+                              Text(routine.icon, style: const TextStyle(fontSize: 24)),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   routine.name,
-                                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                               Switch(
                                 value: routine.enabled,
                                 activeThumbColor: routine.color,
                                 onChanged: (val) {
-                                  ref.read(routineNotifierProvider).updateRoutine(routine.copyWith(enabled: val));
+                                  ref.read(routineNotifierProvider).updateRoutine(
+                                        routine.copyWith(enabled: val),
+                                      );
                                 },
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _formatDays(routine.daysOfWeek),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                            ),
                           ),
                           if (routine.description.isNotEmpty) ...[
                             const SizedBox(height: 8),
                             Text(
                               routine.description,
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                               ),
                             ),
                           ],
                           const SizedBox(height: 16),
                           Row(
                             children: [
-                              Icon(
-                                routine.enabled ? Icons.check_circle : Icons.cancel,
-                                size: 16,
-                                color: routine.enabled ? Colors.green : Colors.grey,
-                              ),
+                              Icon(Icons.calendar_today, size: 16, color: routine.color),
                               const SizedBox(width: 8),
                               Text(
-                                routine.enabled ? 'Active' : 'Disabled',
+                                _formatDays(routine.daysOfWeek),
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: routine.enabled ? Colors.green : Colors.grey,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                                 ),
                               ),
                             ],
@@ -139,32 +168,181 @@ class RoutinesScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.repeat_rounded, size: 72, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+            const SizedBox(height: 16),
+            Text('Build Your Ideal Routine', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(
+              'Structure your days with powerful habits and time blocks.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _showTemplatesModal(context, ref),
+              icon: const Icon(Icons.dashboard_customize_outlined),
+              label: const Text('Explore Templates'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => const AddEditRoutineSheet(),
+                );
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Create Custom Routine'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutineTemplatesSheet extends StatelessWidget {
+  final ValueChanged<RoutineTemplate> onTemplateSelected;
+
+  const _RoutineTemplatesSheet({required this.onTemplateSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final templates = RoutineTemplate.predefinedTemplates;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.repeat_rounded, size: 80, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
-          const SizedBox(height: 16),
-          Text('Create your first routine', style: theme.textTheme.titleLarge),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Color(0xFF7C3AED), size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Starter Routine Templates',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+            ],
+          ),
           const SizedBox(height: 8),
           Text(
-            'Build a repeatable day that works for you.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            'Select a science-backed template to instantly generate structured time blocks.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => const AddEditRoutineSheet(),
-              );
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Create Routine'),
+          const SizedBox(height: 16),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: templates.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (ctx, idx) {
+                final t = templates[idx];
+                return Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: t.color.withValues(alpha: 0.3), width: 1.5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(t.icon, style: const TextStyle(fontSize: 22)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                t.title,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: t.color.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${t.blocks.length} blocks',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: t.color,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          t.description,
+                          style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: t.blocks.map((b) {
+                            return Chip(
+                              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                              visualDensity: VisualDensity.compact,
+                              avatar: Text(b.icon, style: const TextStyle(fontSize: 12)),
+                              label: Text('${b.title} (${b.startTime.format(context)})', style: const TextStyle(fontSize: 10)),
+                              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            onPressed: () => onTemplateSelected(t),
+                            icon: const Icon(Icons.check, size: 16),
+                            label: const Text('Use Template'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: t.color,
+                              foregroundColor: Colors.white,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

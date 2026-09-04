@@ -4,9 +4,11 @@ import 'package:timora/features/schedule/data/repositories/schedule_repository.d
 import 'package:timora/features/home/presentation/providers/home_provider.dart';
 import 'package:timora/features/routine/application/routine_scheduler_service.dart';
 import 'package:timora/features/notifications/application/notification_controller.dart';
+import 'package:timora/features/notifications/application/voice_announcement_service.dart';
 import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
 import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
 import 'package:timora/features/cloud_sync/services/sync_service.dart';
+import '../../../widget/services/widget_update_service.dart';
 
 final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
@@ -48,14 +50,21 @@ final scheduleActivitiesProvider = FutureProvider<List<ScheduleActivity>>((ref) 
 
 class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
   final ScheduleRepository _repo;
+  final VoiceAnnouncementService _voice;
   final Ref _ref;
 
-  ScheduleNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
+  ScheduleNotifier(this._repo, this._voice, this._ref) : super(const AsyncValue.data(null));
 
   void _notifyRelated(DateTime date) {
     _ref.invalidate(scheduleActivitiesProvider);
     _ref.invalidate(dailyScheduleProvider);
     _ref.invalidate(scheduleActivitiesByDateProvider(date));
+    try {
+      _ref.read(notificationControllerProvider).syncScheduleNotifications(date);
+    } catch (_) {}
+    try {
+      _ref.read(widgetUpdateServiceProvider).updateWidgets();
+    } catch (_) {}
     _ref.read(syncServiceProvider).autoSync();
   }
 
@@ -108,6 +117,9 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
       operation: SyncOperation.update,
     );
     _notifyRelated(activity.date);
+
+    // Speak schedule completion announcement
+    _voice.speakScheduleCompleted(activityId: activity.id, activityName: activity.title);
   }
 
   Future<void> markSkipped(ScheduleActivity activity) async {
@@ -137,7 +149,11 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
 }
 
 final scheduleNotifierProvider = Provider<ScheduleNotifier>((ref) {
-  return ScheduleNotifier(ref.watch(scheduleRepositoryProvider), ref);
+  return ScheduleNotifier(
+    ref.watch(scheduleRepositoryProvider),
+    ref.watch(voiceAnnouncementServiceProvider),
+    ref,
+  );
 });
 
 final scheduleActivitiesByDateProvider = FutureProvider.family<List<ScheduleActivity>, DateTime>((ref, date) async {

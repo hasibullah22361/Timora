@@ -6,6 +6,8 @@ import '../widgets/task_card.dart';
 import 'create_edit_task_sheet.dart';
 import 'task_details_screen.dart';
 
+import 'package:timora/features/quick_add/presentation/widgets/quick_add_sheet.dart';
+
 class TasksScreen extends ConsumerWidget {
   const TasksScreen({super.key});
 
@@ -22,6 +24,13 @@ class TasksScreen extends ConsumerWidget {
         title: const Text('Tasks', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome, color: Color(0xFF7C3AED)),
+            tooltip: 'Quick Add with AI',
+            onPressed: () => QuickAddSheet.show(context),
+          ),
+        ],
       ),
       body: CustomScrollView(
         slivers: [

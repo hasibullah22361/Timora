@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/notification_settings_repository.dart';
 import '../../../notifications/application/notification_service.dart';
 import '../../../notifications/application/voice_announcement_service.dart';
+import '../../../notifications/application/alarm_scheduler_service.dart';
+import '../../../notifications/application/notification_event_engine.dart';
 
 class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -292,9 +295,79 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
             value: repo.spokenAnnouncementsEnabled,
             onChanged: (val) {
               repo.setSpokenAnnouncementsEnabled(val);
+              ref.read(alarmSchedulerServiceProvider).updateSpokenSetting(val);
               setState(() {});
             },
           ),
+          if (repo.spokenAnnouncementsEnabled) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Speaking Speed',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${repo.speakingSpeed.toStringAsFixed(1)}x',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('0.1x', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      Expanded(
+                        child: Slider(
+                          value: repo.speakingSpeed,
+                          min: 0.1,
+                          max: 2.0,
+                          divisions: 19,
+                          label: '${repo.speakingSpeed.toStringAsFixed(1)}x',
+                          onChanged: (val) {
+                            repo.setSpeakingSpeed(double.parse(val.toStringAsFixed(1)));
+                            setState(() {});
+                          },
+                        ),
+                      ),
+                      const Text('2.0x', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    children: [0.5, 0.8, 1.0, 1.2, 1.5, 2.0].map((spd) {
+                      final isSelected = (repo.speakingSpeed - spd).abs() < 0.05;
+                      return ChoiceChip(
+                        label: Text('${spd}x'),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          if (selected) {
+                            repo.setSpeakingSpeed(spd);
+                            setState(() {});
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           const SizedBox(height: 24),
           Padding(
@@ -304,8 +377,25 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      final service = ref.read(notificationServiceProvider);
-                      await service.showImmediateNotification(999, 'Timora Test', 'Timora notifications are working.');
+                      if (Platform.isAndroid) {
+                        // Native Android background alarm pipeline test via central Notification Engine
+                        final engine = ref.read(notificationEventEngineProvider);
+                        await engine.triggerTestNotification();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Test notification scheduled via production engine — will speak and display in 5s (try locking the screen!).')),
+                          );
+                        }
+                      } else {
+                        // Fallback for iOS/Desktop
+                        final voiceService = ref.read(voiceAnnouncementServiceProvider);
+                        await voiceService.speakTestNotification();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Test notification sent — listen for speech.')),
+                          );
+                        }
+                      }
                     },
                     icon: const Icon(Icons.notifications_active, size: 16),
                     label: const Text('Test Notification'),

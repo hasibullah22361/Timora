@@ -74,7 +74,7 @@ class AIActionPayload {
   });
 }
 
-enum AIActionType { createTask, createFocusSession, updateTask }
+enum AIActionType { createTask, createFocusSession, updateTask, scheduleActivity, createHabit }
 
 class AIAction {
   final String id;

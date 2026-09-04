@@ -28,7 +28,22 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
           userId: _userId,
           fallbackEmail: email,
           fallbackName: name,
-        ));
+        )) {
+    _hydrateFromCloud();
+  }
+
+  void _hydrateFromCloud() async {
+    if (_userId != null &&
+        _userId!.isNotEmpty &&
+        !_userId!.startsWith('guest_') &&
+        _userId != 'usr_timora_1' &&
+        _userId != 'user_default') {
+      final cloudProfile = await _repo.fetchProfileFromCloud(_userId!);
+      if (cloudProfile != null) {
+        state = cloudProfile;
+      }
+    }
+  }
 
   void _onProfileSaved() {
     if (_ref != null) {

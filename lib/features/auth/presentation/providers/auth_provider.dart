@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase show AuthChangeEvent;
 import '../../data/auth_repository.dart';
 import '../../data/models/auth_models.dart';
+import '../../../cloud_sync/services/sync_service.dart';
+import '../../../profile/services/profile_image_service.dart';
 
 class AuthState {
   final AuthUser? user;
@@ -8,6 +13,7 @@ class AuthState {
   final String? errorMessage;
   final String? successMessage;
   final bool requiresEmailConfirmation;
+  final bool isPasswordRecovery;
 
   const AuthState({
     this.user,
@@ -15,6 +21,7 @@ class AuthState {
     this.errorMessage,
     this.successMessage,
     this.requiresEmailConfirmation = false,
+    this.isPasswordRecovery = false,
   });
 
   bool get isAuthenticated => user != null;
@@ -28,6 +35,7 @@ class AuthState {
     String? successMessage,
     bool clearSuccess = false,
     bool? requiresEmailConfirmation,
+    bool? isPasswordRecovery,
   }) {
     return AuthState(
       user: clearUser ? null : (user ?? this.user),
@@ -35,13 +43,14 @@ class AuthState {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
       requiresEmailConfirmation: requiresEmailConfirmation ?? this.requiresEmailConfirmation,
+      isPasswordRecovery: isPasswordRecovery ?? this.isPasswordRecovery,
     );
   }
 }
 
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>((ref) {
   final repository = ref.watch(authRepositoryProvider);
-  return AuthController(repository);
+  return AuthController(repository, ref);
 });
 
 final currentUserProvider = Provider<AuthUser?>((ref) {
@@ -54,9 +63,12 @@ final isAuthenticatedProvider = Provider<bool>((ref) {
 
 class AuthController extends StateNotifier<AuthState> {
   final AuthRepository _repository;
+  final Ref? _ref;
+  StreamSubscription? _authSubscription;
 
-  AuthController(this._repository) : super(const AuthState()) {
+  AuthController(this._repository, [this._ref]) : super(const AuthState()) {
     _initSession();
+    _listenToAuthChanges();
   }
 
   void _initSession() {
@@ -64,6 +76,61 @@ class AuthController extends StateNotifier<AuthState> {
     if (user != null) {
       state = AuthState(user: user);
     }
+  }
+
+  void _listenToAuthChanges() {
+    _authSubscription = _repository.authStateChanges.listen((data) {
+      final event = data.event;
+      if (event == supabase.AuthChangeEvent.passwordRecovery) {
+        state = state.copyWith(isPasswordRecovery: true, clearError: true);
+      } else if (event == supabase.AuthChangeEvent.signedOut) {
+        state = const AuthState(user: null, isLoading: false);
+      } else if (event == supabase.AuthChangeEvent.signedIn) {
+        final currentUser = _repository.getCurrentUser();
+        if (currentUser != null && state.user?.id != currentUser.id) {
+          state = state.copyWith(user: currentUser, isLoading: false);
+          // Trigger full cloud sync on sign-in
+          _triggerPostLoginSync();
+        }
+      } else if (event == supabase.AuthChangeEvent.tokenRefreshed) {
+        // Token refresh: update user info without resetting state
+        final currentUser = _repository.getCurrentUser();
+        if (currentUser != null) {
+          state = state.copyWith(user: currentUser);
+        }
+      } else if (event == supabase.AuthChangeEvent.userUpdated) {
+        final currentUser = _repository.getCurrentUser();
+        if (currentUser != null) {
+          state = state.copyWith(user: currentUser, isLoading: false);
+        }
+      }
+    });
+  }
+
+  /// Triggers sync after login to restore user data from the cloud.
+  void _triggerPostLoginSync() {
+    if (_ref == null) return;
+    try {
+      final syncService = _ref!.read(syncServiceProvider);
+      syncService.syncNow();
+      debugPrint('[Auth] Post-login cloud sync triggered');
+    } catch (e) {
+      debugPrint('[Auth] Post-login sync notice: $e');
+    }
+
+    // Also download profile image from cloud
+    try {
+      final imgService = _ref!.read(profileImageServiceProvider);
+      imgService.downloadAndCacheProfileImage();
+    } catch (e) {
+      debugPrint('[Auth] Profile image download notice: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   String _cleanErrorMessage(Object error) {
@@ -91,6 +158,7 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final user = await _repository.login(email: email, password: password);
       state = AuthState(user: user, isLoading: false);
+      _triggerPostLoginSync();
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -139,7 +207,26 @@ class AuthController extends StateNotifier<AuthState> {
       await _repository.resetPassword(email);
       state = state.copyWith(
         isLoading: false,
-        successMessage: 'Password reset link sent if an account exists for that email.',
+        successMessage: 'Password reset instructions have been sent to your email.',
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: _cleanErrorMessage(e),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> updatePassword(String newPassword) async {
+    state = state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
+    try {
+      await _repository.updatePassword(newPassword);
+      state = state.copyWith(
+        isLoading: false,
+        isPasswordRecovery: false,
+        successMessage: 'Password updated successfully! Please sign in with your new password.',
       );
       return true;
     } catch (e) {
@@ -175,4 +262,23 @@ class AuthController extends StateNotifier<AuthState> {
       state = const AuthState(user: null, isLoading: false);
     }
   }
+
+  /// Signs in with Google OAuth. Phase 4.
+  Future<bool> loginWithGoogle() async {
+    state = state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
+    try {
+      final user = await _repository.signInWithGoogle();
+      state = AuthState(user: user, isLoading: false);
+      _triggerPostLoginSync();
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        clearUser: true,
+        errorMessage: _cleanErrorMessage(e),
+      );
+      return false;
+    }
+  }
 }
+

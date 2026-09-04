@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 enum ActivityCategoryGroup {
+  islamic('Islamic & Prayer', '🕌', Color(0xFF0D9488)),
+  desiLifestyle('Desi Lifestyle', '☕', Color(0xFFD97706)),
   healthFitness('Health & Fitness', '🏃', Color(0xFF10B981)),
   foodDrink('Food & Drink', '🍽️', Color(0xFFF59E0B)),
   personalCare('Personal Care', '✨', Color(0xFF06B6D4)),

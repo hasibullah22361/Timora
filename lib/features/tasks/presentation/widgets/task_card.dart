@@ -19,12 +19,19 @@ class TaskCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final isCompleted = task.status == TaskStatus.completed;
 
+    final isBlocked = ref.watch(isTaskBlockedProvider(task.id));
+
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: isBlocked && !isCompleted
+              ? const Color(0xFFF59E0B).withValues(alpha: 0.7)
+              : theme.dividerColor.withValues(alpha: 0.5),
+          width: isBlocked && !isCompleted ? 1.5 : 1.0,
+        ),
       ),
       child: InkWell(
         onTap: onTap,
@@ -65,13 +72,45 @@ class TaskCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 10),
-                    Text(
-                      task.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        decoration: isCompleted ? TextDecoration.lineThrough : null,
-                        color: isCompleted ? theme.disabledColor : null,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            task.title,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              decoration: isCompleted ? TextDecoration.lineThrough : null,
+                              color: isCompleted ? theme.disabledColor : null,
+                            ),
+                          ),
+                        ),
+                        if (isBlocked && !isCompleted) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFF59E0B)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.lock_outline, size: 11, color: Color(0xFFD97706)),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Blocked',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFD97706),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     if (task.description.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -96,6 +135,8 @@ class TaskCard extends ConsumerWidget {
                         if (task.dueDate != null)
                           _buildDateBadge(context, task.dueDate!, task.dueTime, isCompleted),
                         _buildCategoryBadge(context, task.category, isCompleted),
+                        if (task.dependsOnTaskIds.isNotEmpty && !isCompleted)
+                          _buildDependencyBadge(context, task.dependsOnTaskIds.length),
                       ],
                     ),
                   ],
@@ -104,6 +145,28 @@ class TaskCard extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDependencyBadge(BuildContext context, int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.account_tree_outlined, size: 10, color: Color(0xFF6366F1)),
+          const SizedBox(width: 4),
+          Text(
+            '$count prerequisite${count > 1 ? 's' : ''}',
+            style: const TextStyle(fontSize: 10, color: Color(0xFF6366F1), fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }

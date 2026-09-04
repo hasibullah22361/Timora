@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -8,7 +7,12 @@ import 'ai_context_builder.dart';
 
 import '../../tasks/presentation/providers/task_provider.dart';
 import '../../tasks/data/models/task_model.dart';
-import '../../tasks/data/repositories/task_repository.dart';
+import '../../habits/presentation/providers/habit_provider.dart';
+import '../../habits/data/models/habit_model.dart';
+import '../../schedule/presentation/providers/schedule_provider.dart';
+import '../../schedule/data/models/schedule_activity.dart';
+import '../../focus/presentation/providers/focus_provider.dart';
+import '../../focus/data/models/focus_session_model.dart';
 
 final aiMessagesProvider = StateNotifierProvider<AIMessagesNotifier, List<AIMessage>>((ref) {
   return AIMessagesNotifier(ref);
@@ -73,19 +77,53 @@ class AIActionService {
     for (var action in actions) {
       switch (action.type) {
         case AIActionType.createTask:
-          final repo = _ref.read(taskRepositoryProvider);
-          await repo.createTask(TaskModel(
+          final task = TaskModel(
             id: _uuid.v4(),
             title: action.data['title'] ?? 'AI Task',
             priority: _parsePriority(action.data['priority']),
+            category: action.data['category'] ?? 'General',
+            estimatedDurationMinutes: action.data['durationMinutes'] as int? ?? 30,
             createdAt: DateTime.now(),
-          ));
-          _ref.invalidate(allTasksProvider);
+          );
+          await _ref.read(taskNotifierProvider).createTask(task);
           break;
+
+        case AIActionType.createHabit:
+          final habit = HabitModel(
+            id: _uuid.v4(),
+            title: action.data['title'] ?? 'New Habit',
+            icon: action.data['icon'] ?? '🔥',
+            frequency: action.data['frequency'] ?? 'daily',
+            createdAt: DateTime.now(),
+          );
+          await _ref.read(habitNotifierProvider).createHabit(habit);
+          break;
+
+        case AIActionType.scheduleActivity:
+          final now = DateTime.now();
+          final start = now.add(const Duration(minutes: 10));
+          final durationMinutes = action.data['durationMinutes'] as int? ?? 45;
+          final activity = ScheduleActivity(
+            id: _uuid.v4(),
+            title: action.data['title'] ?? 'Scheduled Activity',
+            date: DateTime(now.year, now.month, now.day),
+            startTime: start,
+            endTime: start.add(Duration(minutes: durationMinutes)),
+            category: action.data['category'] ?? 'Focus',
+            icon: '⚡',
+            createdAt: DateTime.now(),
+          );
+          await _ref.read(scheduleNotifierProvider).addActivity(activity);
+          break;
+
         case AIActionType.createFocusSession:
-          // Simulate focus session creation (MVP)
-          debugPrint('AI created focus session: ${action.data['title']}');
+          final duration = action.data['durationMinutes'] as int? ?? 25;
+          await _ref.read(focusTimerProvider.notifier).startSession(
+            durationMinutes: duration,
+            mode: FocusSessionMode.pomodoro,
+          );
           break;
+
         default:
           break;
       }

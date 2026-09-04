@@ -6,6 +6,7 @@ import 'package:timora/features/tasks/presentation/providers/task_provider.dart'
 import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
 import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
 import 'package:timora/features/cloud_sync/services/sync_service.dart';
+import 'package:timora/features/habits/presentation/providers/habit_provider.dart';
 
 final allGoalsProvider = FutureProvider<List<GoalModel>>((ref) async {
   final repo = ref.watch(goalRepositoryProvider);
@@ -58,12 +59,17 @@ final goalProgressProvider = FutureProvider.family<double, String>((ref, goalId)
     return completed / milestones.length;
   }
   
-  // If no milestones, check linked tasks
+  // If no milestones, check linked tasks and habits
   final allTasks = await ref.watch(allTasksProvider.future);
   final linkedTasks = allTasks.where((t) => t.goalId == goalId).toList();
-  if (linkedTasks.isNotEmpty) {
-    final completed = linkedTasks.where((t) => t.isCompleted).length;
-    return completed / linkedTasks.length;
+  final allHabits = ref.watch(allHabitsProvider).valueOrNull ?? [];
+  final linkedHabits = allHabits.where((h) => h.goalId == goalId).toList();
+
+  final totalItems = linkedTasks.length + linkedHabits.length;
+  if (totalItems > 0) {
+    final completedTasks = linkedTasks.where((t) => t.isCompleted).length;
+    final activeHabitsOnStreak = linkedHabits.where((h) => h.currentStreak > 0).length;
+    return (completedTasks + activeHabitsOnStreak) / totalItems;
   }
   
   return 0.0;

@@ -4,12 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
+import 'core/config/supabase_config.dart';
 import 'core/providers/shared_prefs_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'features/notifications/application/notification_service.dart';
 import 'features/settings/data/repositories/notification_settings_repository.dart';
 import 'features/settings/presentation/providers/settings_provider.dart';
 import 'features/splash/presentation/screens/splash_screen.dart';
+import 'features/widget/services/widget_navigation_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,8 +19,8 @@ Future<void> main() async {
   // Initialize Supabase
   try {
     await Supabase.initialize(
-      url: 'https://zwrlfslghwkjhuzcujsw.supabase.co',
-      anonKey: 'YOUR_PUBLISHABLE_KEY',
+      url: SupabaseConfig.url,
+      anonKey: SupabaseConfig.anonKey,
     );
   } catch (e) {
     debugPrint('Supabase initialization notice: $e');
@@ -33,6 +35,9 @@ Future<void> main() async {
   // Initialize Notifications
   final notificationService = NotificationService();
   await notificationService.initialize();
+
+  // Initialize Home Screen Widget navigation listener
+  WidgetNavigationService.initialize();
 
   runApp(
     ProviderScope(
@@ -56,6 +61,7 @@ class TimoraApp extends ConsumerWidget {
 
     return MaterialApp(
       title: 'Timora',
+      navigatorKey: WidgetNavigationService.navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

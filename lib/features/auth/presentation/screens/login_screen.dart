@@ -6,6 +6,7 @@ import '../../../../core/widgets/timora_branding.dart';
 import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
+import 'update_password_screen.dart';
 import '../../../main_layout/presentation/screens/main_layout_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -24,6 +25,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   static final RegExp _emailRegExp = RegExp(
     r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
   );
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if app was opened via password recovery link
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(authControllerProvider).isPasswordRecovery && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const UpdatePasswordScreen()),
+        );
+      }
+    });
+  }
 
   void _login() async {
     // Dismiss keyboard

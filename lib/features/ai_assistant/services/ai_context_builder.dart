@@ -6,7 +6,13 @@ import '../../profile/presentation/providers/user_profile_provider.dart';
 import '../../tasks/presentation/providers/task_provider.dart';
 import '../../goals/presentation/providers/goal_provider.dart';
 import '../../projects/presentation/providers/project_provider.dart';
+import '../../habits/presentation/providers/habit_provider.dart';
+import '../../diary/presentation/providers/diary_provider.dart';
 import '../../schedule/data/repositories/schedule_repository.dart';
+import '../../daily_plan/data/repositories/daily_plan_repository.dart';
+import '../../weekly_plan/data/repositories/weekly_plan_repository.dart';
+import '../../weekly_plan/presentation/providers/weekly_plan_provider.dart';
+import '../../monthly_plan/data/repositories/monthly_plan_repository.dart';
 
 final aiPrivacyProvider = StateProvider<AIPrivacySettings>((ref) => AIPrivacySettings());
 
@@ -40,6 +46,36 @@ class AIContextBuilder {
       buffer.writeln('- Daily Focus Target: ${profile.dailyGoalHours} hours');
       buffer.writeln('- Daily Task Target: ${profile.dailyTaskGoal} tasks');
       buffer.writeln('- Preferred Routine Style: ${profile.routinePreference}');
+    } catch (_) {}
+
+    // 2. Active Plans (Daily, Weekly, Monthly)
+    try {
+      final today = DateTime(now.year, now.month, now.day);
+      final dailyRepo = _ref.read(dailyPlanRepositoryProvider);
+      final dayPlan = await dailyRepo.getPlanForDate(today);
+      if (dayPlan != null) {
+        final blocks = await dailyRepo.getBlocksForDate(dayPlan.id);
+        buffer.writeln('\nToday\'s Daily Plan:');
+        buffer.writeln('- Status: ${dayPlan.status.name}');
+        buffer.writeln('- Planned Blocks: ${blocks.length}');
+        if (dayPlan.plannedDurationSeconds > 0) {
+          buffer.writeln('- Planned Duration: ${dayPlan.plannedDurationSeconds ~/ 60} mins');
+        }
+      }
+
+      final weeklyRepo = _ref.read(weeklyPlanRepositoryProvider);
+      final weekPlan = await weeklyRepo.getPlanForWeek(getStartOfWeek(today));
+      if (weekPlan != null && weekPlan.notes.isNotEmpty) {
+        buffer.writeln('\nThis Week\'s Objectives:');
+        buffer.writeln('- ${weekPlan.notes}');
+      }
+
+      final monthlyRepo = _ref.read(monthlyPlanRepositoryProvider);
+      final monthPlan = await monthlyRepo.getPlanForMonth(now.year, now.month);
+      if (monthPlan != null && monthPlan.notes.isNotEmpty) {
+        buffer.writeln('\nThis Month\'s Focus:');
+        buffer.writeln('- ${monthPlan.notes}');
+      }
     } catch (_) {}
 
     // 2. Today Schedule Context
@@ -95,6 +131,28 @@ class AIContextBuilder {
         for (var p in activeProjects.take(5)) {
           buffer.writeln('- ${p.title}: ${p.description}');
         }
+      }
+    } catch (_) {}
+
+    // 6. Active Habits & Streaks Context
+    try {
+      final habits = await _ref.read(allHabitsProvider.future);
+      if (habits.isNotEmpty) {
+        buffer.writeln('\nActive Habits (${habits.length}):');
+        for (var h in habits.take(6)) {
+          buffer.writeln('- ${h.icon} ${h.title} (Current Streak: ${h.currentStreak} days, Record: ${h.bestStreak} days)');
+        }
+      }
+    } catch (_) {}
+
+    // 7. Recent Diary & Mood Context
+    try {
+      final diarySummary = await _ref.read(moodTrendsProvider(7).future);
+      if (diarySummary.totalEntries > 0) {
+        buffer.writeln('\nRecent Diary & Well-Being (Last 7 Days):');
+        buffer.writeln('- Average Mood Rating: ${diarySummary.averageMood.toStringAsFixed(1)} / 5.0');
+        buffer.writeln('- Average Energy Level: ${diarySummary.averageEnergy.toStringAsFixed(1)} / 5.0');
+        buffer.writeln('- Total Reflections Logged: ${diarySummary.totalEntries}');
       }
     } catch (_) {}
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../projects/presentation/providers/project_provider.dart';
+import '../../../projects/presentation/screens/projects_screen.dart';
 
 class ProjectProgressList extends ConsumerWidget {
   const ProjectProgressList({super.key});
@@ -23,7 +24,12 @@ class ProjectProgressList extends ConsumerWidget {
               ),
             ),
             TextButton(
-              onPressed: () {},
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProjectsScreen()),
+                );
+              },
               child: const Text('View All'),
             ),
           ],
