@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../planner/presentation/screens/planner_screen.dart';
+import '../../../settings/presentation/screens/notification_settings_screen.dart';
+import 'package:timora/features/ambient_sound/presentation/screens/ambient_sounds_screen.dart';
 import '../../../projects/presentation/screens/projects_screen.dart';
 import '../../../goals/presentation/screens/goals_screen.dart';
 import '../../../analytics/presentation/screens/analytics_screen.dart';
-import '../../../profile/presentation/screens/profile_screen.dart';
-import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../../ai_assistant/presentation/screens/ai_assistant_screen.dart';
 import '../../../focus/presentation/screens/focus_screen.dart';
 import '../../../habits/presentation/screens/habits_screen.dart';
 import '../../../diary/presentation/screens/diary_screen.dart';
-import '../../../profile/presentation/providers/user_profile_provider.dart';
 
 class OthersScreen extends ConsumerWidget {
   const OthersScreen({super.key});
@@ -17,9 +17,47 @@ class OthersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final profile = ref.watch(userProfileProvider);
 
     final items = [
+      _OthersItem(
+        title: 'Planner',
+        description: 'Daily, weekly & monthly scheduling, agenda timelines and productivity templates',
+        icon: Icons.calendar_month_outlined,
+        color: const Color(0xFF2563EB),
+        badgeText: 'Daily/Weekly/Monthly',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PlannerScreen()),
+          );
+        },
+      ),
+      _OthersItem(
+        title: 'Notifications & Spoken Voice',
+        description: 'Smart phone mode audio detection, speaking speeds (0.1×–2.0×) and alerts',
+        icon: Icons.notifications_active_outlined,
+        color: const Color(0xFFF59E0B),
+        badgeText: 'Smart Audio',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()),
+          );
+        },
+      ),
+      _OthersItem(
+        title: 'Ambient Environment Sounds',
+        description: '12 soothing nature soundscapes (Rain, Ocean, Cafe, Night, Birds) with focus auto-stop',
+        icon: Icons.headphones_outlined,
+        color: const Color(0xFF0284C7),
+        badgeText: '12 Sounds',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AmbientSoundsScreen()),
+          );
+        },
+      ),
       _OthersItem(
         title: 'Timora AI Assistant',
         description: 'Chat with AI for smart daily planning, routines & goal execution',
@@ -76,7 +114,7 @@ class OthersScreen extends ConsumerWidget {
         title: 'Projects',
         description: 'Manage your ongoing projects, milestones, and deliverables',
         icon: Icons.folder_outlined,
-        color: const Color(0xFF2563EB),
+        color: const Color(0xFF0D9488),
         onTap: () {
           Navigator.push(
             context,
@@ -109,29 +147,18 @@ class OthersScreen extends ConsumerWidget {
         },
       ),
       _OthersItem(
-        title: 'Profile',
-        description: 'Manage your profile details, avatar, work hours, and goals',
-        icon: Icons.person_outline,
-        color: const Color(0xFFF59E0B),
-        badgeText: profile.fullName,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ProfileScreen()),
-          );
-        },
+        title: 'About Timora',
+        description: 'Make Time Work for You • Version 1.0.0 • Offline-first cloud sync',
+        icon: Icons.info_outline,
+        color: const Color(0xFF64748B),
+        onTap: () => _showAboutDialog(context),
       ),
       _OthersItem(
-        title: 'Settings',
-        description: 'Customize themes, notifications, spoken voice, and data backup',
-        icon: Icons.settings_outlined,
-        color: const Color(0xFF64748B),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
-          );
-        },
+        title: 'Help & Support',
+        description: 'User guides, shortcuts, offline sync documentation and feedback',
+        icon: Icons.help_outline_rounded,
+        color: const Color(0xFF475569),
+        onTap: () => _showHelpDialog(context),
       ),
     ];
 
@@ -154,7 +181,7 @@ class OthersScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Access your projects, goals, productivity charts, and full settings.',
+            'Access Planner, ambient audio, notification controls, and secondary tools.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
             ),
@@ -162,6 +189,98 @@ class OthersScreen extends ConsumerWidget {
           const SizedBox(height: 20),
           ...items.map((item) => _buildCard(context, item)),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  void _showAboutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Text('⏱️', style: TextStyle(fontSize: 26)),
+            SizedBox(width: 10),
+            Text('About Timora', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Timora',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 4),
+            Text(
+              'Make Time Work for You.',
+              style: TextStyle(fontStyle: FontStyle.italic, color: Colors.blue),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'A local-first, privacy-focused productivity powerhouse featuring cloud synchronization, intelligent notification voice announcements, offline calendar and habit tracking, and distraction-free flow focus tools.',
+              style: TextStyle(height: 1.4),
+            ),
+            SizedBox(height: 16),
+            Text('Version: 1.0.0 (Build 2026)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.help_outline, color: Colors.blue),
+            SizedBox(width: 10),
+            Text('Help & Support', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Offline First', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text(
+                'Timora operates completely offline. All your data is saved locally and automatically synced with Supabase whenever internet connectivity is restored.',
+                style: TextStyle(fontSize: 13, height: 1.3),
+              ),
+              SizedBox(height: 12),
+              Text('Voice Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text(
+                'Spoken announcements automatically respect your phone audio mode (silent, vibrate, or normal/ring). Customize speaking speeds in Notifications & Spoken Voice.',
+                style: TextStyle(fontSize: 13, height: 1.3),
+              ),
+              SizedBox(height: 12),
+              Text('Planner & Routine Templates', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text(
+                'Access daily, weekly, and monthly views from Planner. Use ready-made templates like Full Productive Day to structure your entire day instantly.',
+                style: TextStyle(fontSize: 13, height: 1.3),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it'),
+          ),
         ],
       ),
     );
@@ -214,10 +333,13 @@ class OthersScreen extends ConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            item.title,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
+                          Flexible(
+                            child: Text(
+                              item.title,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           if (item.badgeText != null) ...[
@@ -231,7 +353,7 @@ class OthersScreen extends ConsumerWidget {
                               child: Text(
                                 item.badgeText!,
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: item.color,
                                 ),

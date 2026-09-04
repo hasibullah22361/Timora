@@ -174,16 +174,25 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
     _updateWidgets();
   }
 
-  Future<void> finishSessionEarly() async {
-    if (state.activeSession == null) return;
+  Future<FocusSessionModel?> stopSession() async {
+    if (state.activeSession == null) return null;
     _uiTimer?.cancel();
     _cancelNotification();
     
     final s = state.activeSession!;
+    final now = DateTime.now();
+    int actualDurationSeconds;
+    if (s.status == FocusSessionStatus.paused && s.pausedAt != null) {
+      actualDurationSeconds = s.pausedAt!.difference(s.startedAt).inSeconds - s.totalPausedDurationSeconds;
+    } else {
+      actualDurationSeconds = now.difference(s.startedAt).inSeconds - s.totalPausedDurationSeconds;
+    }
+    if (actualDurationSeconds < 0) actualDurationSeconds = 0;
+
     final finished = s.copyWith(
       status: FocusSessionStatus.completed,
-      endedAt: DateTime.now(),
-      actualDurationSeconds: state.elapsedSeconds,
+      endedAt: now,
+      actualDurationSeconds: actualDurationSeconds,
     );
     await _repo.saveSession(finished);
     await _ref.read(syncRepositoryProvider).enqueueChange(
@@ -191,12 +200,17 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
       entityId: finished.id,
       operation: SyncOperation.create,
     );
-    state = FocusTimerState(activeSession: finished, elapsedSeconds: state.elapsedSeconds);
+    state = FocusTimerState(activeSession: finished, elapsedSeconds: actualDurationSeconds);
     _ref.invalidate(todayFocusSessionsProvider);
     _ref.invalidate(allFocusSessionsProvider);
     _ref.invalidate(focusStatsProvider);
     _ref.read(syncServiceProvider).autoSync();
     _updateWidgets();
+    return finished;
+  }
+
+  Future<void> finishSessionEarly() async {
+    await stopSession();
   }
 
   Future<void> cancelSession() async {

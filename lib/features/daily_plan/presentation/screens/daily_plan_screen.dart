@@ -7,6 +7,8 @@ import 'package:timora/features/daily_plan/data/models/timeline_item.dart';
 import 'package:timora/features/daily_plan/presentation/widgets/auto_plan_dialog.dart';
 import 'package:timora/features/daily_plan/presentation/widgets/plan_task_sheet.dart';
 import '../../../focus/presentation/screens/focus_screen.dart';
+import 'package:timora/features/schedule/presentation/screens/add_edit_activity_sheet.dart';
+import 'package:timora/features/schedule/presentation/providers/schedule_provider.dart' show scheduleNotifierProvider, scheduleActivitiesByDateProvider;
 
 class DailyPlanScreen extends ConsumerWidget {
   const DailyPlanScreen({super.key});
@@ -316,6 +318,56 @@ class DailyPlanScreen extends ConsumerWidget {
                           itemBuilder: (ctx) => [
                             const PopupMenuItem(value: 'move', child: Text('Move to another day')),
                             const PopupMenuItem(value: 'delete', child: Text('Remove from Plan', style: TextStyle(color: Colors.red))),
+                          ],
+                        ),
+                      if (item.type == TimelineItemType.schedule)
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, size: 20),
+                          onSelected: (v) async {
+                            final currentDate = ref.read(selectedDateProvider);
+                            if (v == 'edit') {
+                              final activities = ref.read(scheduleActivitiesByDateProvider(currentDate)).valueOrNull ?? [];
+                              final act = activities.where((a) => a.id == item.sourceId).firstOrNull;
+                              if (act != null && context.mounted) {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  useSafeArea: true,
+                                  builder: (_) => AddEditActivitySheet(activityToEdit: act),
+                                );
+                              }
+                            } else if (v == 'delete') {
+                              await ref.read(scheduleNotifierProvider).deleteActivity(item.sourceId);
+                              ref.invalidate(scheduleActivitiesByDateProvider(currentDate));
+                              ref.invalidate(timelineProvider(currentDate));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Scheduled activity removed')),
+                                );
+                              }
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Edit Schedule'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Delete Schedule', style: TextStyle(color: Colors.red)),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                     ],

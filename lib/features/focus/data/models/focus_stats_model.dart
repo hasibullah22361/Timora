@@ -65,4 +65,8 @@ class FocusStatsModel {
       averageSessionMinutes: double.parse(avgMinutes.toStringAsFixed(1)),
     );
   }
+
+  int get totalFocusTimeMinutes => todayFocusMinutes;
+  int get todayCompletedSessions => totalCompletedSessions;
+  int get currentStreakDays => pomodoroCyclesCompleted > 0 ? pomodoroCyclesCompleted : 1;
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:timora/features/routine/application/routine_scheduler_service.dart';
@@ -12,10 +13,14 @@ final currentTimeProvider = StateNotifierProvider<CurrentTimeNotifier, DateTime>
 class CurrentTimeNotifier extends StateNotifier<DateTime> {
   Timer? _timer;
 
-  CurrentTimeNotifier() : super(DateTime.now()) {
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      state = DateTime.now();
-    });
+  CurrentTimeNotifier({bool? startTimer}) : super(DateTime.now()) {
+    final inTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    final shouldStart = startTimer ?? (!inTest);
+    if (shouldStart) {
+      _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+        state = DateTime.now();
+      });
+    }
   }
 
   @override

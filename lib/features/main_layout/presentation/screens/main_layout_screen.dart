@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../home/presentation/screens/home_screen.dart';
-import '../../../planner/presentation/screens/planner_screen.dart';
 import '../../../schedule/presentation/screens/schedule_screen.dart';
 import '../../../tasks/presentation/screens/tasks_screen.dart';
 import '../../../routine/presentation/screens/routines_screen.dart';
@@ -26,17 +25,21 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const PlannerScreen(),
     const ScheduleScreen(),
     const TasksScreen(),
     const RoutinesScreen(),
     const OthersScreen(),
   ];
 
+  VoiceAnnouncementService? _voiceService;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    try {
+      _voiceService = ref.read(voiceAnnouncementServiceProvider);
+    } catch (_) {}
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Refresh Home Screen widgets on startup
       _updateWidgets();
@@ -44,12 +47,11 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
       // On Android, scheduled speaking notifications are handled natively by
       // AlarmManager + TimoraSpeakingService in all app states (foreground & background).
       // On other platforms, fallback to in-app polling.
-      if (!Platform.isAndroid) {
-        final voiceService = ref.read(voiceAnnouncementServiceProvider);
+      if (!Platform.isAndroid && _voiceService != null) {
         final scheduleRepo = ref.read(scheduleRepositoryProvider);
         final taskRepo = ref.read(taskRepositoryProvider);
 
-        voiceService.startScheduleMonitoring(
+        _voiceService!.startScheduleMonitoring(
           () async {
             final now = DateTime.now();
             final date = DateTime(now.year, now.month, now.day);
@@ -79,7 +81,9 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(voiceAnnouncementServiceProvider).stopScheduleMonitoring();
+    try {
+      _voiceService?.stopScheduleMonitoring();
+    } catch (_) {}
     super.dispose();
   }
 
@@ -135,11 +139,6 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home_rounded),
               label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.auto_stories_outlined),
-              selectedIcon: Icon(Icons.auto_stories_rounded),
-              label: 'Planner',
             ),
             NavigationDestination(
               icon: Icon(Icons.calendar_today_outlined),

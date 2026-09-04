@@ -20,6 +20,7 @@ import 'package:timora/features/settings/data/models/settings_models.dart';
 import 'package:timora/features/cloud_sync/presentation/widgets/sync_indicator_widget.dart';
 import 'package:timora/features/profile/presentation/providers/user_profile_provider.dart';
 import 'package:timora/features/profile/presentation/screens/profile_screen.dart';
+import 'package:timora/features/settings/presentation/screens/settings_screen.dart';
 import 'package:timora/features/ai_assistant/presentation/widgets/timora_ai_button.dart';
 import 'package:timora/features/quick_add/presentation/widgets/quick_add_sheet.dart';
 
@@ -95,38 +96,54 @@ class HomeScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(25),
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: profile.avatarColor.withValues(alpha: 0.16),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: profile.avatarColor, width: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.settings_outlined),
+                        tooltip: 'Settings',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                          );
+                        },
                       ),
-                      alignment: Alignment.center,
-                      child: hasCustomAvatar
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: Image.file(
-                                File(profile.customImagePath!),
-                                width: 48,
-                                height: 48,
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : Text(
-                              profile.avatarPreset,
-                              style: const TextStyle(fontSize: 26),
-                            ),
-                    ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(25),
+                        child: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: profile.avatarColor.withValues(alpha: 0.16),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: profile.avatarColor, width: 2),
+                          ),
+                          alignment: Alignment.center,
+                          child: hasCustomAvatar
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Image.file(
+                                    File(profile.customImagePath!),
+                                    width: 48,
+                                    height: 48,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : Text(
+                                  profile.avatarPreset,
+                                  style: const TextStyle(fontSize: 26),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

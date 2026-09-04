@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:timora/features/focus/data/models/focus_session_model.dart';
 import 'package:timora/features/focus/presentation/providers/focus_provider.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
+import 'package:timora/features/ambient_sound/data/models/ambient_sound_model.dart';
+import 'package:timora/features/ambient_sound/services/ambient_sound_service.dart';
+import 'package:timora/features/ambient_sound/presentation/screens/ambient_sounds_screen.dart';
 import 'focus_history_screen.dart';
 
 class FocusScreen extends ConsumerStatefulWidget {
@@ -22,9 +26,6 @@ class FocusScreen extends ConsumerStatefulWidget {
 }
 
 class _FocusScreenState extends ConsumerState<FocusScreen> {
-  String _selectedAmbient = 'None';
-  final List<String> _ambientSounds = ['None', '🌧️ Rain', '🌲 Forest', '☕ Cafe', '🌊 Ocean', '🎧 Binaural'];
-
   void _showCustomDurationSheet(BuildContext context) {
     int selectedMinutes = 30;
     showModalBottomSheet(
@@ -95,6 +96,113 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
     );
   }
 
+  void _showFocusCompletedDialog(BuildContext context, FocusSessionModel session) {
+    final theme = Theme.of(context);
+    final actualMinutes = session.actualDurationSeconds ~/ 60;
+    final targetMinutes = session.plannedDurationSeconds ~/ 60;
+    final percentage = targetMinutes > 0
+        ? ((session.actualDurationSeconds / session.plannedDurationSeconds) * 100).clamp(0, 100).round()
+        : 100;
+
+    final startStr = DateFormat('h:mm a').format(session.startedAt);
+    final endStr = session.endedAt != null ? DateFormat('h:mm a').format(session.endedAt!) : 'Now';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+            ),
+            const SizedBox(width: 12),
+            const Text('Focus Completed', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '$actualMinutes min focused',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$percentage% Complete',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildSummaryRow('Start Time', startStr, Icons.play_arrow_outlined),
+            const SizedBox(height: 8),
+            _buildSummaryRow('End Time', endStr, Icons.stop_outlined),
+            const SizedBox(height: 8),
+            _buildSummaryRow('Target Duration', '$targetMinutes min', Icons.timer_outlined),
+            const SizedBox(height: 12),
+            Text(
+              'Session saved to Focus History and Productivity Analytics.',
+              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const FocusHistoryScreen()));
+            },
+            child: const Text('View History'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.grey),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+        const Spacer(),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -108,6 +216,16 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.headphones_outlined),
+            tooltip: 'Ambient Sounds',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AmbientSoundsScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.history_rounded),
             tooltip: 'Focus History',
@@ -132,6 +250,8 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
   Widget _buildSetupScreen(BuildContext context) {
     final theme = Theme.of(context);
     final statsAsync = ref.watch(focusStatsProvider);
+    final ambientState = ref.watch(ambientSoundServiceProvider);
+    final ambientService = ref.read(ambientSoundServiceProvider.notifier);
 
     return ListView(
       padding: const EdgeInsets.all(20.0),
@@ -158,45 +278,18 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                Column(
-                  children: [
-                    const Text('Today Focus', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${stats.todayFocusMinutes}m',
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                Container(width: 1, height: 36, color: Colors.white24),
-                Column(
-                  children: [
-                    const Text('This Week', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${stats.weekFocusMinutes}m',
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                Container(width: 1, height: 36, color: Colors.white24),
-                Column(
-                  children: [
-                    const Text('Completed', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${stats.totalCompletedSessions}',
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
+                _buildStatItem('${stats.totalFocusTimeMinutes}m', 'Total Focused'),
+                Container(width: 1, height: 32, color: Colors.white24),
+                _buildStatItem('${stats.todayCompletedSessions}', 'Today Sessions'),
+                Container(width: 1, height: 32, color: Colors.white24),
+                _buildStatItem('${stats.currentStreakDays}d', 'Flow Streak'),
               ],
             ),
           ),
           loading: () => const SizedBox.shrink(),
           error: (_, __) => const SizedBox.shrink(),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 28),
 
         Center(
           child: Column(
@@ -247,20 +340,47 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
         const SizedBox(height: 28),
 
         // Ambient Sound Bar
-        Text('🎧 Ambient Sound Environment', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '🎧 Ambient Environment Sound',
+              style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AmbientSoundsScreen()),
+                );
+              },
+              child: const Text('View All (12)'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _ambientSounds.map((sound) {
-            final isSelected = _selectedAmbient == sound;
+          children: AmbientSound.allSounds.take(6).map((sound) {
+            final isSelected = ambientState.currentSound.id == sound.id;
             return ChoiceChip(
-              label: Text(sound),
+              label: Text('${sound.icon} ${sound.name}'),
               selected: isSelected,
-              onSelected: (_) => setState(() => _selectedAmbient = sound),
+              onSelected: (_) => ambientService.play(sound.id),
             );
           }).toList(),
         ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(String val, String label) {
+    return Column(
+      children: [
+        Text(val, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
       ],
     );
   }
@@ -316,31 +436,52 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
   Widget _buildActiveTimer(BuildContext context, FocusTimerState state) {
     final theme = Theme.of(context);
     final session = state.activeSession!;
+    final elapsed = state.elapsedSeconds;
     final remaining = state.remainingSeconds;
 
-    final minutes = (remaining / 60).floor().toString().padLeft(2, '0');
-    final seconds = (remaining % 60).toString().padLeft(2, '0');
+    // Elapsed time format (MM:SS)
+    final elapsedMins = (elapsed ~/ 60).toString().padLeft(2, '0');
+    final elapsedSecs = (elapsed % 60).toString().padLeft(2, '0');
+    final elapsedDisplay = '$elapsedMins:$elapsedSecs';
+
+    final targetMins = session.plannedDurationSeconds ~/ 60;
+    final currentElapsedMin = (elapsed / 60).floor();
+
     final progress = (session.plannedDurationSeconds > 0)
-        ? (1.0 - (remaining / session.plannedDurationSeconds)).clamp(0.0, 1.0)
+        ? (elapsed / session.plannedDurationSeconds).clamp(0.0, 1.0)
         : 0.0;
+    final percentage = (progress * 100).round();
+
+    final startFormatted = DateFormat('h:mm a').format(session.startedAt);
 
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Circular Timer
+            // Top Digital Clock (Elapsed Time)
+            Text(
+              elapsedDisplay,
+              style: theme.textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.w300,
+                letterSpacing: 3,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Large Circular Timer UI (Phase 19 specification)
             Stack(
               alignment: Alignment.center,
               children: [
                 SizedBox(
-                  width: 270,
-                  height: 270,
+                  width: 260,
+                  height: 260,
                   child: CircularProgressIndicator(
                     value: progress,
-                    strokeWidth: 10,
-                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    strokeWidth: 12,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                     color: theme.colorScheme.primary,
                     strokeCap: StrokeCap.round,
                   ),
@@ -348,35 +489,82 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '$minutes:$seconds',
-                      style: theme.textTheme.displayLarge?.copyWith(
-                        fontWeight: FontWeight.w300,
-                        fontSize: 60,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         session.mode.name.toUpperCase(),
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
                           color: theme.colorScheme.primary,
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '$currentElapsedMin min',
+                      style: theme.textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 34,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Started: $startFormatted',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 20),
+
+            // Completion Percentage & Target Summary
+            Text(
+              '$percentage% Complete',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${(remaining / 60).ceil()}m remaining',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$targetMins m target',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
 
             // Active Task/Project Info
             if (session.taskId != null)
@@ -385,6 +573,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                 if (task == null) return const SizedBox.shrink();
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.only(bottom: 20),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
@@ -392,7 +581,6 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                   child: Text('🎯 Focus Task: ${task.title}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 );
               }),
-            const SizedBox(height: 36),
 
             // Play / Pause Action
             Row(
@@ -400,18 +588,21 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
               children: [
                 if (session.status == FocusSessionStatus.running)
                   FloatingActionButton.large(
+                    heroTag: 'pauseFocus',
                     onPressed: () => ref.read(focusTimerProvider.notifier).pauseSession(),
-                    child: const Icon(Icons.pause),
+                    child: const Icon(Icons.pause, size: 36),
                   )
                 else if (session.status == FocusSessionStatus.paused)
                   FloatingActionButton.large(
+                    heroTag: 'resumeFocus',
                     onPressed: () => ref.read(focusTimerProvider.notifier).resumeSession(),
-                    child: const Icon(Icons.play_arrow),
+                    child: const Icon(Icons.play_arrow, size: 36),
                   ),
               ],
             ),
             const SizedBox(height: 24),
 
+            // Stop / Cancel actions
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -420,12 +611,19 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                   child: const Text('Cancel Session', style: TextStyle(color: Colors.red)),
                 ),
                 const SizedBox(width: 32),
-                ElevatedButton(
-                  onPressed: () => ref.read(focusTimerProvider.notifier).finishSessionEarly(),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final finished = await ref.read(focusTimerProvider.notifier).stopSession();
+                    if (finished != null && context.mounted) {
+                      _showFocusCompletedDialog(context, finished);
+                    }
+                  },
+                  icon: const Icon(Icons.stop_rounded),
+                  label: const Text('■ Stop'),
                   style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Finish Session'),
                 ),
               ],
             ),

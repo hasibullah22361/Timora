@@ -4,6 +4,7 @@ import 'package:timora/features/planner/presentation/providers/planner_provider.
 import 'package:timora/features/daily_plan/presentation/screens/daily_plan_screen.dart';
 import 'package:timora/features/weekly_plan/presentation/screens/weekly_plan_screen.dart';
 import 'package:timora/features/monthly_plan/presentation/screens/monthly_plan_screen.dart';
+import 'package:timora/features/routine/presentation/screens/routine_templates_screen.dart';
 
 class PlannerScreen extends ConsumerStatefulWidget {
   const PlannerScreen({super.key});
@@ -48,20 +49,27 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60),
-        child: SafeArea(
+      appBar: AppBar(
+        title: const Text('Planner', style: TextStyle(fontWeight: FontWeight.bold)),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RoutineTemplatesScreen()),
+              );
+            },
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: const Text('Templates', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 8),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(56),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              border: Border(
-                bottom: BorderSide(
-                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                  width: 1,
-                ),
-              ),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Container(
               height: 44,
               decoration: BoxDecoration(

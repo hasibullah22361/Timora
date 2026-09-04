@@ -230,7 +230,8 @@ void main() {
         id: 'r1',
         name: 'Morning Routine',
         daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
-        createdAt: DateTime.now(),
+        startDate: DateTime(2026, 8, 1),
+        createdAt: DateTime(2026, 8, 1),
       );
       final block = RoutineBlock(
         id: 'b1',
