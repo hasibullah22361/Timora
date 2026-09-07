@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../notifications/application/engine/web_bridge.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
@@ -107,10 +109,16 @@ class ExportService {
 
     final jsonString = jsonEncode(envelope.toJson());
     
-    // Write to temp file
-    final tempDir = await getTemporaryDirectory();
     final timestamp = DateFormat('yyyy-MM-dd_HH-mm').format(DateTime.now());
     final filename = 'timora_backup_$timestamp.timora.json';
+
+    if (kIsWeb) {
+      WebBridge.downloadFile(filename, jsonString);
+      return;
+    }
+
+    // Write to temp file on native platforms
+    final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/$filename');
     await file.writeAsString(jsonString);
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:timora/core/theme/app_colors.dart';
 import 'package:timora/features/focus/data/models/focus_session_model.dart';
 import 'package:timora/features/focus/presentation/providers/focus_provider.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
@@ -210,7 +211,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
     final activeSession = timerState.activeSession;
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Focus & Flow', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
@@ -387,6 +388,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
 
   Widget _buildPresetCard(BuildContext context, int minutes, String label, String icon, FocusSessionMode mode) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return InkWell(
       onTap: () {
         ref.read(focusTimerProvider.notifier).startSession(
@@ -401,9 +403,20 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          color: isDark ? AppColors.cardDark : AppColors.cardLight,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.25), width: 1.5),
+          border: Border.all(
+            color: isDark ? AppColors.borderDark : AppColors.borderLight,
+            width: 1.5,
+          ),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,7 +582,8 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
             // Active Task/Project Info
             if (session.taskId != null)
               Consumer(builder: (context, ref, _) {
-                final task = ref.watch(allTasksProvider).valueOrNull?.firstWhere((t) => t.id == session.taskId);
+                final allTasks = ref.watch(allTasksProvider).valueOrNull ?? [];
+                final task = allTasks.where((t) => t.id == session.taskId).firstOrNull;
                 if (task == null) return const SizedBox.shrink();
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

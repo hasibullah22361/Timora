@@ -41,6 +41,88 @@ class AuthRepository {
     }
   }
 
+  /// Asynchronously restores and refreshes the Supabase authentication session on startup.
+  /// 1. Reads the current session from Supabase's persistent local storage.
+  /// 2. If the access token is expired, proactively attempts refreshSession().
+  /// 3. If the network is offline, safely retains the cached session for offline use.
+  /// 4. If the session is genuinely invalid (revoked/logged out), returns null.
+  Future<AuthSession?> restoreSession() async {
+    try {
+      final session = _client.auth.currentSession;
+      final user = _client.auth.currentUser;
+
+      if (session != null) {
+        if (session.isExpired) {
+          try {
+            debugPrint('[Auth] Session token is expired on startup, refreshing session...');
+            final response = await _client.auth.refreshSession();
+            final refreshedSession = response.session ?? _client.auth.currentSession;
+            final targetUser = response.user ?? refreshedSession?.user ?? user;
+            if (refreshedSession != null && targetUser != null) {
+              debugPrint('[Auth] Session successfully refreshed for user: ${targetUser.id}');
+              return _mapUserAndSession(refreshedSession, targetUser);
+            }
+          } catch (e) {
+            debugPrint('[Auth] Session refresh attempt notice: $e');
+            final err = e.toString().toLowerCase();
+            // Retain cached session if offline/network error
+            final isNetwork = err.contains('network') ||
+                err.contains('socket') ||
+                err.contains('failed host lookup') ||
+                err.contains('connection');
+            if (isNetwork && user != null) {
+              debugPrint('[Auth] Offline mode detected: retaining cached session for offline access.');
+              return _mapUserAndSession(session, user);
+            }
+            // If the refresh token was explicitly revoked/invalid
+            if (err.contains('invalid_grant') ||
+                err.contains('refresh_token_not_found') ||
+                err.contains('token has expired')) {
+              return null;
+            }
+          }
+        }
+
+        if (user != null) {
+          return _mapUserAndSession(session, user);
+        }
+      }
+
+      if (user != null) {
+        return _mapUserAndSession(session, user);
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('[Auth] restoreSession notice: $e');
+      return null;
+    }
+  }
+
+  /// Maps Supabase user and session into Timora's AuthSession model.
+  AuthSession _mapUserAndSession(Session? session, User user) {
+    final displayName = (user.userMetadata?['full_name'] as String?)?.trim() ??
+        (user.userMetadata?['name'] as String?)?.trim() ??
+        (user.email?.split('@').first ?? 'User');
+
+    final authUser = AuthUser(
+      id: user.id,
+      email: user.email ?? '',
+      name: displayName.isNotEmpty ? displayName : 'User',
+      isGuest: user.isAnonymous,
+      createdAt: DateTime.tryParse(user.createdAt) ?? DateTime.now(),
+    );
+
+    return AuthSession(
+      token: session?.accessToken ?? '',
+      user: authUser,
+      createdAt: DateTime.now(),
+      expiresAt: session?.expiresAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(session!.expiresAt! * 1000)
+          : null,
+    );
+  }
+
   /// Returns the current session without rejecting expired tokens.
   /// Supabase SDK automatically refreshes tokens, so we should not
   /// reject sessions that appear expired — the SDK handles renewal.
@@ -49,32 +131,8 @@ class AuthRepository {
       final session = _client.auth.currentSession;
       final user = _client.auth.currentUser;
 
-      // Prefer currentUser which is always available if session was restored
       if (user == null) return null;
-
-      // If session is null but user exists, session might still be refreshing
-      // Return user info with a placeholder token — the SDK will refresh
-      final effectiveSession = session;
-      final displayName = (user.userMetadata?['full_name'] as String?)?.trim() ??
-          (user.userMetadata?['name'] as String?)?.trim() ??
-          (user.email?.split('@').first ?? 'User');
-
-      final authUser = AuthUser(
-        id: user.id,
-        email: user.email ?? '',
-        name: displayName.isNotEmpty ? displayName : 'User',
-        isGuest: user.isAnonymous,
-        createdAt: DateTime.tryParse(user.createdAt) ?? DateTime.now(),
-      );
-
-      return AuthSession(
-        token: effectiveSession?.accessToken ?? '',
-        user: authUser,
-        createdAt: DateTime.now(),
-        expiresAt: effectiveSession?.expiresAt != null
-            ? DateTime.fromMillisecondsSinceEpoch(effectiveSession!.expiresAt! * 1000)
-            : null,
-      );
+      return _mapUserAndSession(session, user);
     } catch (_) {
       return null;
     }

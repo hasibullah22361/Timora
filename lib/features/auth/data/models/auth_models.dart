@@ -65,9 +65,14 @@ class AuthSession {
     this.expiresAt,
   });
 
-  bool get isValid {
-    if (expiresAt == null) return true;
-    return DateTime.now().isBefore(expiresAt!);
+  /// A session is valid as long as an authenticated user is present.
+  /// Supabase SDK automatically refreshes expired access tokens using the refresh token.
+  bool get isValid => user.id.isNotEmpty;
+
+  /// Checks if the current access token has expired.
+  bool get isExpired {
+    if (expiresAt == null) return false;
+    return DateTime.now().isAfter(expiresAt!);
   }
 
   Map<String, dynamic> toJson() {

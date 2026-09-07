@@ -18,6 +18,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.util.Locale
@@ -48,6 +49,8 @@ class TimoraSpeakingService : Service() {
         const val EXTRA_SPEAK_TEXT = "speak_text"
         const val EXTRA_EVENT_TYPE = "event_type"
         const val EXTRA_SPEAK_ENABLED = "speak_enabled"
+        const val EXTRA_VOICE_GENDER = "voice_gender"
+        const val EXTRA_SPEAK_SPEED = "speak_speed"
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
@@ -61,6 +64,8 @@ class TimoraSpeakingService : Service() {
     private var currentTitle: String = "Timora Alert"
     private var currentBody: String = ""
     private var currentSpeakText: String = ""
+    private var currentVoiceGender: String = "female"
+    private var currentSpeakSpeed: Float = 1.0f
 
     private val safetyTimeoutRunnable = Runnable {
         Log.w(TAG, "[TimoraTTS] Safety timeout reached (25s) — forcing service shutdown")
@@ -81,8 +86,10 @@ class TimoraSpeakingService : Service() {
         currentBody = intent?.getStringExtra(EXTRA_BODY) ?: ""
         currentSpeakText = intent?.getStringExtra(EXTRA_SPEAK_TEXT) ?: ""
         val speakEnabled = intent?.getBooleanExtra(EXTRA_SPEAK_ENABLED, true) ?: true
+        currentVoiceGender = intent?.getStringExtra(EXTRA_VOICE_GENDER) ?: "female"
+        currentSpeakSpeed = intent?.getFloatExtra(EXTRA_SPEAK_SPEED, 1.0f) ?: 1.0f
 
-        Log.d(TAG, "[TimoraAlarm] Service started: id=$currentAlarmId title=\"$currentTitle\" speakEnabled=$speakEnabled")
+        Log.d(TAG, "[TimoraAlarm] Service started: id=$currentAlarmId title=\"$currentTitle\" speakEnabled=$speakEnabled voiceGender=$currentVoiceGender speed=$currentSpeakSpeed")
 
         // 1. Acquire WakeLock immediately to prevent device sleeping during TTS init
         acquireWakeLock()
@@ -109,14 +116,24 @@ class TimoraSpeakingService : Service() {
             return START_NOT_STICKY
         }
 
-        // 4. Request audio focus
+        // 4. Check phone ringer mode: if in Silent or Vibrate mode, do NOT speak!
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val ringerMode = am?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
+        if (ringerMode == AudioManager.RINGER_MODE_SILENT || ringerMode == AudioManager.RINGER_MODE_VIBRATE) {
+            Log.d(TAG, "[TimoraTTS] Phone in silent/vibrate mode ($ringerMode) — muting speech")
+            postVisibleNotificationAndExit()
+            return START_NOT_STICKY
+        }
+
+        // 5. Request audio focus
         requestAudioFocus()
 
-        // 5. Initialize and speak via native Android TextToSpeech
+        // 6. Initialize and speak via native Android TextToSpeech
         initializeAndSpeak(currentAlarmId.toString(), currentSpeakText)
 
         return START_NOT_STICKY
     }
+
 
     private fun acquireWakeLock() {
         try {
@@ -167,10 +184,18 @@ class TimoraSpeakingService : Service() {
     private fun initializeAndSpeak(alarmId: String, speakText: String) {
         Log.d(TAG, "[TimoraTTS] Initializing Android TTS")
 
-        ttsEngine = TextToSpeech(applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                Log.d(TAG, "[TimoraTTS] Android TTS initialized successfully")
-                ttsEngine?.let { tts ->
+        // Safely shutdown any existing TTS instance first
+        try {
+            ttsEngine?.stop()
+            ttsEngine?.shutdown()
+        } catch (_: Exception) {}
+        ttsEngine = null
+
+        try {
+            ttsEngine = TextToSpeech(applicationContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    Log.d(TAG, "[TimoraTTS] Android TTS initialized successfully")
+                    ttsEngine?.let { tts ->
                     try {
                         val langResult = tts.setLanguage(Locale.US)
                         if (langResult == TextToSpeech.LANG_MISSING_DATA ||
@@ -180,15 +205,34 @@ class TimoraSpeakingService : Service() {
                             tts.language = Locale.getDefault()
                         }
 
-                        // Route through ALARM stream so speech is audible even in silent/vibrate mode
+                        val isMale = currentVoiceGender.equals("male", ignoreCase = true)
+
+                        // Select best natural voice from available device voices
+                        try {
+                            val voices = tts.voices
+                            if (voices != null && voices.isNotEmpty()) {
+                                val selectedVoice = selectBestNaturalVoice(voices, isMale)
+                                if (selectedVoice != null) {
+                                    tts.voice = selectedVoice
+                                    Log.d(TAG, "[TimoraTTS] Applied native voice: ${selectedVoice.name} (male=$isMale)")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[TimoraTTS] Voice selection notice: ${e.message}")
+                        }
+
                         val audioAttributes = AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_ALARM)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                             .build()
                         tts.setAudioAttributes(audioAttributes)
 
-                        tts.setSpeechRate(0.88f)
-                        tts.setPitch(1.0f)
+                        val pitch = if (isMale) 0.90f else 1.05f
+                        tts.setPitch(pitch)
+
+                        val baseRate = if (isMale) 0.86f else 0.88f
+                        val effectiveRate = (currentSpeakSpeed * baseRate).coerceIn(0.2f, 2.0f)
+                        tts.setSpeechRate(effectiveRate)
 
                         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                             override fun onStart(utteranceId: String?) {
@@ -228,8 +272,41 @@ class TimoraSpeakingService : Service() {
                 Log.e(TAG, "[TimoraTTS] ERROR: TTS initialization failed with status=$status")
                 postVisibleNotificationAndExit()
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "[TimoraTTS] Error instantiating TextToSpeech: ${e.message}")
+            postVisibleNotificationAndExit()
         }
     }
+
+    private fun selectBestNaturalVoice(voices: Set<Voice>, isMale: Boolean): Voice? {
+        val englishVoices = voices.filter { it.locale.language == "en" }
+        if (englishVoices.isEmpty()) return null
+
+        val targetKeyword = if (isMale) "male" else "female"
+        val avoidKeyword = if (isMale) "female" else "male"
+
+        // 1. High quality local voice with specific gender keyword
+        val bestMatch = englishVoices.firstOrNull { voice ->
+            val nameLower = voice.name.lowercase()
+            val features = voice.features?.map { it.lowercase() } ?: emptyList()
+            val hasGender = nameLower.contains(targetKeyword) || features.any { it.contains(targetKeyword) }
+            val notAvoid = !nameLower.contains(avoidKeyword) || (isMale && !nameLower.contains("female"))
+            hasGender && notAvoid && !voice.isNetworkConnectionRequired
+        }
+        if (bestMatch != null) return bestMatch
+
+        // 2. Any voice matching gender keyword
+        val anyGenderMatch = englishVoices.firstOrNull { voice ->
+            val nameLower = voice.name.lowercase()
+            nameLower.contains(targetKeyword) || (voice.features?.any { it.lowercase().contains(targetKeyword) } == true)
+        }
+        if (anyGenderMatch != null) return anyGenderMatch
+
+        // 3. Fallback to en-US local voice
+        return englishVoices.firstOrNull { it.locale.country == "US" && !it.isNetworkConnectionRequired }
+            ?: englishVoices.firstOrNull()
+    }
+
 
     private fun postVisibleNotificationAndExit() {
         // Post persistent visible notification in the Android notification drawer

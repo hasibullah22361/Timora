@@ -78,10 +78,15 @@ void main() {
 
       // Verify Planner is present in Others
       expect(find.text('Planner'), findsOneWidget);
-      // Verify Notifications & Spoken Voice is present in Others
-      expect(find.text('Notifications & Spoken Voice'), findsOneWidget);
       // Verify Ambient Environment Sounds is present in Others
       expect(find.text('Ambient Environment Sounds'), findsOneWidget);
+
+      // Verify Removed Items from Others section are absent
+      expect(find.text('Notifications & Spoken Voice'), findsNothing);
+      expect(find.text('Timora AI Assistant'), findsNothing);
+      expect(find.text('Focus Mode & Timer'), findsNothing);
+      expect(find.text('About Timora'), findsNothing);
+      expect(find.text('Help & Support'), findsNothing);
 
       // Verify Profile and Settings are NOT in Others items
       expect(find.text('Profile'), findsNothing);

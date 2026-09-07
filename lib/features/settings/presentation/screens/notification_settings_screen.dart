@@ -1,11 +1,12 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/notification_settings_repository.dart';
-import '../../../notifications/application/notification_service.dart';
-import '../../../notifications/application/voice_announcement_service.dart';
+import '../../../notifications/application/engine/platform_notification_factory.dart';
 import '../../../notifications/application/alarm_scheduler_service.dart';
 import '../../../notifications/application/notification_event_engine.dart';
+import '../../../notifications/application/voice_announcement_service.dart';
 
 class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -24,8 +25,8 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
   }
 
   Future<void> _checkPermission() async {
-    final service = ref.read(notificationServiceProvider);
-    final status = await service.getNotificationPermissionStatus();
+    final engine = ref.read(notificationEngineProvider);
+    final status = await engine.getPermissionStatus();
     setState(() {
       _permissionGranted = status;
     });
@@ -42,8 +43,8 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final service = ref.read(notificationServiceProvider);
-              final granted = await service.requestPermission();
+              final engine = ref.read(notificationEngineProvider);
+              final granted = await engine.requestPermission();
               setState(() {
                 _permissionGranted = granted;
               });
@@ -295,11 +296,103 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
             value: repo.spokenAnnouncementsEnabled,
             onChanged: (val) {
               repo.setSpokenAnnouncementsEnabled(val);
-              ref.read(alarmSchedulerServiceProvider).updateSpokenSetting(val);
+              if (!kIsWeb) {
+                ref.read(alarmSchedulerServiceProvider).updateSpokenSetting(val);
+              }
               setState(() {});
             },
           ),
           if (repo.spokenAnnouncementsEnabled) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Voice Selection',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          avatar: Icon(
+                            Icons.man_rounded,
+                            size: 18,
+                            color: repo.voiceGender == 'male'
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : null,
+                          ),
+                          label: const Text('Male Voice'),
+                          selected: repo.voiceGender == 'male',
+                          onSelected: (selected) async {
+                            if (selected) {
+                              await repo.setVoiceGender('male');
+                              try {
+                                final voiceService = ref.read(voiceAnnouncementServiceProvider);
+                                await voiceService.switchVoice(isMale: true, speed: repo.speakingSpeed);
+                              } catch (e) {
+                                debugPrint('[Settings] Voice switch notice: $e');
+                              }
+                              if (!kIsWeb) {
+                                ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
+                                  voiceGender: 'male',
+                                  speed: repo.speakingSpeed,
+                                );
+                              }
+                              if (mounted) setState(() {});
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceChip(
+                          avatar: Icon(
+                            Icons.woman_rounded,
+                            size: 18,
+                            color: repo.voiceGender == 'female'
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : null,
+                          ),
+                          label: const Text('Female Voice'),
+                          selected: repo.voiceGender == 'female',
+                          onSelected: (selected) async {
+                            if (selected) {
+                              await repo.setVoiceGender('female');
+                              try {
+                                final voiceService = ref.read(voiceAnnouncementServiceProvider);
+                                await voiceService.switchVoice(isMale: false, speed: repo.speakingSpeed);
+                              } catch (e) {
+                                debugPrint('[Settings] Voice switch notice: $e');
+                              }
+                              if (!kIsWeb) {
+                                ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
+                                  voiceGender: 'female',
+                                  speed: repo.speakingSpeed,
+                                );
+                              }
+                              if (mounted) setState(() {});
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    repo.voiceGender == 'male'
+                        ? 'Natural adult male voice with friendly, professional tone.'
+                        : 'Natural adult female voice with friendly, professional tone.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Column(
@@ -340,7 +433,14 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                           divisions: 19,
                           label: '${repo.speakingSpeed.toStringAsFixed(1)}x',
                           onChanged: (val) {
-                            repo.setSpeakingSpeed(double.parse(val.toStringAsFixed(1)));
+                            final spd = double.parse(val.toStringAsFixed(1));
+                            repo.setSpeakingSpeed(spd);
+                            if (!kIsWeb) {
+                              ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
+                                voiceGender: repo.voiceGender,
+                                speed: spd,
+                              );
+                            }
                             setState(() {});
                           },
                         ),
@@ -358,6 +458,12 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                         onSelected: (selected) {
                           if (selected) {
                             repo.setSpeakingSpeed(spd);
+                            if (!kIsWeb) {
+                              ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
+                                voiceGender: repo.voiceGender,
+                                speed: spd,
+                              );
+                            }
                             setState(() {});
                           }
                         },
@@ -377,7 +483,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      if (Platform.isAndroid) {
+                      if (!kIsWeb && Platform.isAndroid) {
                         // Native Android background alarm pipeline test via central Notification Engine
                         final engine = ref.read(notificationEventEngineProvider);
                         await engine.triggerTestNotification();
@@ -387,12 +493,19 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                           );
                         }
                       } else {
-                        // Fallback for iOS/Desktop
-                        final voiceService = ref.read(voiceAnnouncementServiceProvider);
-                        await voiceService.speakTestNotification();
+                        // Web / Other platform test via NotificationEngine
+                        final engine = ref.read(notificationEngineProvider);
+                        await engine.showImmediateNotification(
+                          9999,
+                          'Timora Test Notification',
+                          'Your notification system is active and ready.',
+                        );
+                        await engine.speak(
+                          'This is a Timora test notification. Your notification system is working.',
+                        );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Test notification sent — listen for speech.')),
+                            const SnackBar(content: Text('Test notification sent — check browser notifications and audio.')),
                           );
                         }
                       }
@@ -405,11 +518,19 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: () async {
-                      final voiceService = ref.read(voiceAnnouncementServiceProvider);
-                      await voiceService.speakSampleAnnouncement('Deep Work');
+                      const phrase = 'Hey, your AI and Data Science study session starts at 9 AM.';
+                      try {
+                        final voiceService = ref.read(voiceAnnouncementServiceProvider);
+                        await voiceService.stop();
+                        await voiceService.speakSampleAnnouncement();
+                      } catch (_) {
+                        final engine = ref.read(notificationEngineProvider);
+                        await engine.speak(phrase);
+                      }
                       if (context.mounted) {
+                        final voiceName = repo.voiceGender == 'male' ? 'Male Voice' : 'Female Voice';
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Speaking sample announcement...')),
+                          SnackBar(content: Text('Speaking ($voiceName): "$phrase"')),
                         );
                       }
                     },
@@ -417,6 +538,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                     label: const Text('Test Voice'),
                   ),
                 ),
+
               ],
             ),
           ),

@@ -7,6 +7,7 @@ import 'package:timora/features/schedule/services/smart_rescheduling_service.dar
 import 'package:timora/features/schedule/services/calendar_sync_service.dart';
 import 'package:timora/features/schedule/presentation/widgets/schedule_timeline.dart';
 import 'package:timora/features/schedule/presentation/screens/add_edit_activity_sheet.dart';
+import 'package:timora/core/theme/app_colors.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
 
 class ScheduleScreen extends ConsumerWidget {
@@ -21,7 +22,7 @@ class ScheduleScreen extends ConsumerWidget {
     final isToday = _isSameDay(selectedDate, DateTime.now());
     
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Schedule & Calendar', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
@@ -122,6 +123,7 @@ class ScheduleScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'schedule_fab',
         onPressed: () {
           showModalBottomSheet(
             context: context,
@@ -137,6 +139,7 @@ class ScheduleScreen extends ConsumerWidget {
 
   Widget _buildCalendarStrip(BuildContext context, WidgetRef ref, DateTime selectedDate) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
@@ -147,9 +150,9 @@ class ScheduleScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
         border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          bottom: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
         ),
       ),
       child: Row(
@@ -169,13 +172,13 @@ class ScheduleScreen extends ConsumerWidget {
                 color: isSelected
                     ? theme.colorScheme.primary
                     : isCurrentDay
-                        ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4)
+                        ? theme.colorScheme.primary.withValues(alpha: 0.12)
                         : Colors.transparent,
                 borderRadius: BorderRadius.circular(14),
                 border: isSelected
                     ? null
                     : isCurrentDay
-                        ? Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.5))
+                        ? Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.4))
                         : null,
               ),
               child: Column(
@@ -273,32 +276,65 @@ class ScheduleScreen extends ConsumerWidget {
 
   Widget _buildEmptyState(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.event_available_outlined, size: 80, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
-          const SizedBox(height: 16),
-          Text('Your day is open.', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(
-            'Create an activity to start planning your time.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Container(
+          padding: const EdgeInsets.all(28.0),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.cardDark : AppColors.cardLight,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+            boxShadow: [
+              if (!isDark)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+            ],
           ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => const AddEditActivitySheet(),
-              );
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add Activity'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.event_available_rounded, size: 36, color: theme.colorScheme.primary),
+              ),
+              const SizedBox(height: 16),
+              Text('Your day is open', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text(
+                'Schedule activities or routine blocks to organize your day.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.65)),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => const AddEditActivitySheet(),
+                  );
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Activity'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

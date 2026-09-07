@@ -47,17 +47,22 @@ class SubtaskModel {
   }
 
   factory SubtaskModel.fromJson(Map<String, dynamic> json) {
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final sortOrder = (json['order'] ?? json['sort_order']) as int? ?? 0;
+    final isDone = (json['completed'] ?? json['is_completed']) as bool? ?? false;
+
     return SubtaskModel(
       id: json['id'] as String,
-      taskId: json['taskId'] as String,
-      title: json['title'] as String,
-      completed: json['completed'] as bool? ?? false,
-      order: json['order'] as int? ?? 0,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+      taskId: (json['taskId'] ?? json['task_id']) as String? ?? '',
+      title: json['title'] as String? ?? 'Subtask',
+      completed: isDone,
+      order: sortOrder,
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? DateTime.now())
           : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      updatedAt: updatedRaw != null
+          ? DateTime.tryParse(updatedRaw.toString())
           : null,
     );
   }

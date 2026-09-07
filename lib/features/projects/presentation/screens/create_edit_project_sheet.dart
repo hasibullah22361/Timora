@@ -70,7 +70,7 @@ class _CreateEditProjectSheetState extends ConsumerState<CreateEditProjectSheet>
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final isNew = widget.projectToEdit == null;
@@ -92,12 +92,12 @@ class _CreateEditProjectSheetState extends ConsumerState<CreateEditProjectSheet>
     );
 
     if (isNew) {
-      ref.read(projectNotifierProvider).createProject(project);
+      await ref.read(projectNotifierProvider).createProject(project);
     } else {
-      ref.read(projectNotifierProvider).updateProject(project);
+      await ref.read(projectNotifierProvider).updateProject(project);
     }
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   @override

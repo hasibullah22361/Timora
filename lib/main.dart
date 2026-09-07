@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,7 +21,11 @@ Future<void> main() async {
   try {
     await Supabase.initialize(
       url: SupabaseConfig.url,
-      anonKey: SupabaseConfig.anonKey,
+      publishableKey: SupabaseConfig.publishableKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+        autoRefreshToken: true,
+      ),
     );
   } catch (e) {
     debugPrint('Supabase initialization notice: $e');
@@ -32,12 +37,18 @@ Future<void> main() async {
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
-  // Initialize Notifications
+  // Initialize Notifications on Android / native
   final notificationService = NotificationService();
-  await notificationService.initialize();
+  if (!kIsWeb) {
+    try {
+      await notificationService.initialize();
+    } catch (e) {
+      debugPrint('Notification service initialization notice: $e');
+    }
 
-  // Initialize Home Screen Widget navigation listener
-  WidgetNavigationService.initialize();
+    // Initialize Home Screen Widget navigation listener on Android
+    WidgetNavigationService.initialize();
+  }
 
   runApp(
     ProviderScope(

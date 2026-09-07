@@ -67,29 +67,34 @@ class PlannedTaskBlockModel {
   }
 
   factory PlannedTaskBlockModel.fromJson(Map<String, dynamic> json) {
+    final dpId = (json['dailyPlanId'] ?? json['daily_plan_id']) as String? ?? '';
+    final tId = (json['taskId'] ?? json['task_id']) as String? ?? '';
+    final sHour = (json['startHour'] ?? json['start_hour']) as int? ?? 0;
+    final sMinute = (json['startMinute'] ?? json['start_minute']) as int? ?? 0;
+    final eHour = (json['endHour'] ?? json['end_hour']) as int? ?? 0;
+    final eMinute = (json['endMinute'] ?? json['end_minute']) as int? ?? 0;
+    final estSec = (json['estimatedDurationSeconds'] ?? json['estimated_duration_seconds']) as int? ?? 0;
+    final fsId = (json['focusSessionId'] ?? json['focus_session_id']) as String?;
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+
     return PlannedTaskBlockModel(
       id: json['id'] as String,
-      dailyPlanId: json['dailyPlanId'] as String,
-      taskId: json['taskId'] as String,
-      startTime: TimeOfDay(
-        hour: json['startHour'] as int? ?? 0,
-        minute: json['startMinute'] as int? ?? 0,
-      ),
-      endTime: TimeOfDay(
-        hour: json['endHour'] as int? ?? 0,
-        minute: json['endMinute'] as int? ?? 0,
-      ),
-      estimatedDurationSeconds: json['estimatedDurationSeconds'] as int? ?? 0,
+      dailyPlanId: dpId,
+      taskId: tId,
+      startTime: TimeOfDay(hour: sHour, minute: sMinute),
+      endTime: TimeOfDay(hour: eHour, minute: eMinute),
+      estimatedDurationSeconds: estSec,
       status: PlannedBlockStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => PlannedBlockStatus.pending,
       ),
-      focusSessionId: json['focusSessionId'] as String?,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+      focusSessionId: fsId,
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? DateTime.now())
           : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      updatedAt: updatedRaw != null
+          ? DateTime.tryParse(updatedRaw.toString())
           : null,
     );
   }

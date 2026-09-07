@@ -104,9 +104,17 @@ class GoalModel {
   }
 
   factory GoalModel.fromJson(Map<String, dynamic> json) {
+    final startRaw = json['startDate'] ?? json['start_date'];
+    final targetRaw = json['targetDate'] ?? json['target_date'];
+    final completedRaw = json['completedAt'] ?? json['completed_at'];
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final progModeRaw = json['progressMode'] ?? json['progress_mode'];
+    final manProgRaw = json['manualProgress'] ?? json['manual_progress'];
+
     return GoalModel(
       id: json['id'] as String,
-      title: json['title'] as String,
+      title: json['title'] as String? ?? 'Goal',
       description: json['description'] as String? ?? '',
       category: json['category'] as String? ?? 'Other',
       status: GoalStatus.values.firstWhere(
@@ -118,22 +126,22 @@ class GoalModel {
         orElse: () => GoalPriority.medium,
       ),
       icon: json['icon'] as String? ?? '🎯',
-      color: json['color'] != null ? Color(json['color'] as int) : Colors.blue,
-      startDate: json['startDate'] != null ? DateTime.parse(json['startDate'] as String) : null,
-      targetDate: json['targetDate'] != null ? DateTime.parse(json['targetDate'] as String) : null,
+      color: json['color'] != null ? Color((json['color'] as num).toInt()) : Colors.blue,
+      startDate: startRaw != null ? DateTime.tryParse(startRaw.toString()) : null,
+      targetDate: targetRaw != null ? DateTime.tryParse(targetRaw.toString()) : null,
       progressMode: ProgressMode.values.firstWhere(
-        (m) => m.name == json['progressMode'],
+        (m) => m.name == progModeRaw,
         orElse: () => ProgressMode.auto,
       ),
-      manualProgress: (json['manualProgress'] as num?)?.toDouble() ?? 0.0,
-      completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt'] as String) : null,
+      manualProgress: (manProgRaw as num?)?.toDouble() ?? 0.0,
+      completedAt: completedRaw != null ? DateTime.tryParse(completedRaw.toString()) : null,
       notes: json['notes'] as String? ?? '',
-      isDeleted: json['isDeleted'] as bool? ?? false,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+      isDeleted: (json['isDeleted'] ?? json['is_deleted']) as bool? ?? false,
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? DateTime.now())
           : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      updatedAt: updatedRaw != null
+          ? DateTime.tryParse(updatedRaw.toString())
           : null,
     );
   }

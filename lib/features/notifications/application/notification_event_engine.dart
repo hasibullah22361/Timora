@@ -9,10 +9,13 @@ import '../../schedule/data/repositories/schedule_repository.dart';
 import '../../tasks/data/models/task_model.dart';
 import '../../tasks/data/repositories/task_repository.dart';
 
+import 'engine/notification_engine.dart';
+import 'engine/platform_notification_factory.dart';
+
 final notificationEventEngineProvider =
     Provider<NotificationEventEngine>((ref) {
   return NotificationEventEngine(
-    ref.watch(alarmSchedulerServiceProvider),
+    ref.watch(notificationEngineProvider),
     ref.watch(notificationSettingsRepositoryProvider),
     ref.watch(scheduleRepositoryProvider),
     ref.watch(taskRepositoryProvider),
@@ -22,17 +25,43 @@ final notificationEventEngineProvider =
 /// NotificationEventEngine — The single source of truth for scheduling, updating,
 /// and cancelling all Timora notifications and spoken announcements.
 class NotificationEventEngine {
-  final AlarmSchedulerService _alarmScheduler;
+  final NotificationEngine? _engine;
+  final AlarmSchedulerService? _alarmScheduler;
   final NotificationSettingsRepository _settings;
   final ScheduleRepository _scheduleRepo;
   final TaskRepository _taskRepo;
 
   NotificationEventEngine(
-    this._alarmScheduler,
+    dynamic schedulerOrEngine,
     this._settings,
     this._scheduleRepo,
     this._taskRepo,
-  );
+  )   : _engine = schedulerOrEngine is NotificationEngine ? schedulerOrEngine : null,
+        _alarmScheduler = schedulerOrEngine is AlarmSchedulerService ? schedulerOrEngine : null;
+
+  Future<void> _syncEvents(List<NotificationEvent> events) async {
+    if (_engine != null) {
+      await _engine?.syncEvents(events);
+    } else if (_alarmScheduler != null) {
+      await _alarmScheduler?.syncEvents(events);
+    }
+  }
+
+  Future<void> _cancelEventsBySource(String sourceId) async {
+    if (_engine != null) {
+      await _engine?.cancelEventsBySource(sourceId);
+    } else if (_alarmScheduler != null) {
+      await _alarmScheduler?.cancelEventsBySource(sourceId);
+    }
+  }
+
+  Future<void> _cancelAll() async {
+    if (_engine != null) {
+      await _engine?.cancelAll();
+    } else if (_alarmScheduler != null) {
+      await _alarmScheduler?.cancelAllAlarms();
+    }
+  }
 
   bool _isQuietHours(DateTime time) {
     if (!_settings.quietHoursEnabled) return false;
@@ -61,7 +90,7 @@ class NotificationEventEngine {
   Future<void> syncSchedule(DateTime date) async {
     if (!_settings.notificationsEnabled) {
       debugPrint('[NotificationEngine] Notifications disabled globally — cancelling all');
-      await _alarmScheduler.cancelAllAlarms();
+      await _cancelAll();
       return;
     }
 
@@ -80,7 +109,7 @@ class NotificationEventEngine {
       if (act.status == ActivityStatus.skipped ||
           act.status == ActivityStatus.completed) {
         // Ensure old alarms for this activity are cancelled
-        await _alarmScheduler.cancelEventsBySource(act.id);
+        await _cancelEventsBySource(act.id);
         continue;
       }
 
@@ -172,7 +201,7 @@ class NotificationEventEngine {
 
     debugPrint(
         '[NotificationEngine] Syncing ${eventsToSchedule.length} schedule events for $date');
-    await _alarmScheduler.syncEvents(eventsToSchedule);
+    await _syncEvents(eventsToSchedule);
   }
 
   /// Builds the 10:00 PM next-day planning notification event for tonight.
@@ -211,7 +240,7 @@ class NotificationEventEngine {
 
   Future<void> syncTask(TaskModel task) async {
     // Always cancel old events for this task first
-    await _alarmScheduler.cancelEventsBySource(task.id);
+    await _cancelEventsBySource(task.id);
 
     if (task.isDeleted ||
         task.status != TaskStatus.pending ||
@@ -271,7 +300,7 @@ class NotificationEventEngine {
     }
 
     if (events.isNotEmpty) {
-      await _alarmScheduler.syncEvents(events);
+      await _syncEvents(events);
     }
   }
 
@@ -306,6 +335,6 @@ class NotificationEventEngine {
     );
 
     debugPrint('[NotificationEngine] Triggering test notification in 5 seconds');
-    await _alarmScheduler.syncEvents([testEvent]);
+    await _syncEvents([testEvent]);
   }
 }

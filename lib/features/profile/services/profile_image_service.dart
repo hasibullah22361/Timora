@@ -31,8 +31,39 @@ class ProfileImageService {
     return '$userId/profile.jpg';
   }
 
+  /// Uploads raw image bytes to Supabase Storage and returns the public URL.
+  Future<String?> uploadProfileImageBytes(Uint8List bytes) async {
+    final client = _client;
+    if (client == null || userId == null || userId!.isEmpty) return null;
+
+    try {
+      final path = _storagePath;
+
+      try {
+        await client.storage.from(_storageBucket).remove([path]);
+      } catch (_) {}
+
+      await client.storage.from(_storageBucket).uploadBinary(
+        path,
+        bytes,
+        fileOptions: const FileOptions(
+          contentType: 'image/jpeg',
+          upsert: true,
+        ),
+      );
+
+      final publicUrl = client.storage.from(_storageBucket).getPublicUrl(path);
+      debugPrint('[ProfileImage] Uploaded bytes to: $publicUrl');
+      return publicUrl;
+    } catch (e) {
+      debugPrint('[ProfileImage] Upload error: $e');
+      return null;
+    }
+  }
+
   /// Uploads a local image file to Supabase Storage and returns the public URL.
   Future<String?> uploadProfileImage(String localFilePath) async {
+    if (kIsWeb) return null;
     final client = _client;
     if (client == null || userId == null || userId!.isEmpty) return null;
 
@@ -44,27 +75,7 @@ class ProfileImageService {
       }
 
       final bytes = await file.readAsBytes();
-      final path = _storagePath;
-
-      // Try to remove existing image first (ignore errors)
-      try {
-        await client.storage.from(_storageBucket).remove([path]);
-      } catch (_) {}
-
-      // Upload new image
-      await client.storage.from(_storageBucket).uploadBinary(
-        path,
-        bytes,
-        fileOptions: const FileOptions(
-          contentType: 'image/jpeg',
-          upsert: true,
-        ),
-      );
-
-      // Get public URL
-      final publicUrl = client.storage.from(_storageBucket).getPublicUrl(path);
-      debugPrint('[ProfileImage] Uploaded to: $publicUrl');
-      return publicUrl;
+      return await uploadProfileImageBytes(bytes);
     } catch (e) {
       debugPrint('[ProfileImage] Upload error: $e');
       return null;
@@ -77,9 +88,13 @@ class ProfileImageService {
     final client = _client;
     if (client == null || userId == null || userId!.isEmpty) return null;
 
-    try {
-      final path = _storagePath;
+    final path = _storagePath;
+    if (kIsWeb) {
+      // On Web, return the public storage URL directly — no local file system needed
+      return client.storage.from(_storageBucket).getPublicUrl(path);
+    }
 
+    try {
       // Download bytes from Supabase Storage
       final bytes = await client.storage.from(_storageBucket).download(path);
 
@@ -116,7 +131,7 @@ class ProfileImageService {
 
   /// Removes the local cached profile image.
   Future<void> removeLocalCache() async {
-    if (userId == null || userId!.isEmpty) return;
+    if (kIsWeb || userId == null || userId!.isEmpty) return;
 
     try {
       final dir = await getApplicationDocumentsDirectory();

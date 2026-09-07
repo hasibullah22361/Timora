@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../focus/presentation/providers/focus_provider.dart';
-import '../../../focus/data/models/focus_session_model.dart';
 import '../../../focus/presentation/screens/focus_screen.dart';
+import '../../../ambient_sound/presentation/screens/ambient_sounds_screen.dart';
+import '../../../analytics/presentation/screens/analytics_screen.dart';
 
 class FocusDashboardWidget extends ConsumerWidget {
   const FocusDashboardWidget({super.key});
@@ -10,127 +10,159 @@ class FocusDashboardWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final timerState = ref.watch(focusTimerProvider);
-    final activeSession = timerState.activeSession;
-    
-    // Check if there is an active running/paused session
-    final isActive = activeSession != null && 
-        (activeSession.status == FocusSessionStatus.running || activeSession.status == FocusSessionStatus.paused);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Focus',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const FocusScreen()));
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isActive 
-                    ? [theme.colorScheme.primary.withValues(alpha: 0.2), theme.colorScheme.primary.withValues(alpha: 0.05)]
-                    : [theme.colorScheme.surfaceContainerHighest, theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isActive ? theme.colorScheme.primary.withValues(alpha: 0.5) : Colors.transparent,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isActive ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isActive ? Icons.timer : Icons.self_improvement,
-                    color: isActive ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: isActive ? _buildActiveContent(context, timerState) : _buildIdleContent(context, ref),
-                ),
-                Icon(Icons.chevron_right, color: theme.colorScheme.onSurfaceVariant),
-              ],
-            ),
+        Text(
+          'Focus Tools',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
           ),
         ),
-      ],
-    );
-  }
-  
-  Widget _buildActiveContent(BuildContext context, FocusTimerState state) {
-    final theme = Theme.of(context);
-    final remaining = state.remainingSeconds;
-    final minutes = (remaining / 60).floor().toString().padLeft(2, '0');
-    final seconds = (remaining % 60).toString().padLeft(2, '0');
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          state.activeSession!.status == FocusSessionStatus.paused ? 'Paused' : 'Focusing',
-          style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$minutes:$seconds remaining',
-          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildIdleContent(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final todaySessionsAsync = ref.watch(todayFocusSessionsProvider);
-    
-    return todaySessionsAsync.when(
-      data: (sessions) {
-        int totalSeconds = 0;
-        for (var s in sessions) {
-          totalSeconds += s.actualDurationSeconds;
-        }
-        final minutes = (totalSeconds / 60).ceil();
-        
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(height: 12),
+        Row(
           children: [
-            Text(
-              'Ready to focus?',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            Expanded(
+              child: _buildToolCard(
+                context: context,
+                title: 'Deep Focus',
+                subtitle: '25 min',
+                icon: Icons.spa_rounded,
+                iconColor: const Color(0xFF22C55E),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FocusScreen()),
+                  );
+                },
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              sessions.isEmpty 
-                  ? 'Start your first session today' 
-                  : '$minutes minutes focused today (${sessions.length} sessions)',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildToolCard(
+                context: context,
+                title: 'Pomodoro',
+                subtitle: '25 / 5',
+                icon: Icons.timer_outlined,
+                iconColor: const Color(0xFFA855F7),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FocusScreen()),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildToolCard(
+                context: context,
+                title: 'Focus Music',
+                subtitle: 'Soundscapes',
+                icon: Icons.music_note_rounded,
+                iconColor: const Color(0xFF06B6D4),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AmbientSoundsScreen()),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildToolCard(
+                context: context,
+                title: 'Statistics',
+                subtitle: 'Analytics',
+                icon: Icons.bar_chart_rounded,
+                iconColor: const Color(0xFFF97316),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AnalyticsScreen()),
+                  );
+                },
+              ),
             ),
           ],
-        );
-      },
-      loading: () => const Text('Loading...'),
-      error: (_, __) => const Text('Start focusing'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToolCard({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0C1322) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? const Color(0xFF172033) : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: iconColor, size: 26),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w400,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
+
+

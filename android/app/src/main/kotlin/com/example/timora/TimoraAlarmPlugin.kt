@@ -57,80 +57,90 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "syncEvents" -> {
-                val rawEvents = call.argument<List<Map<String, Any>>>("events")
-                if (rawEvents == null) {
-                    result.error("INVALID_ARGS", "Missing events list", null)
-                    return
-                }
-                syncEvents(rawEvents)
-                result.success(null)
-            }
-
-            "scheduleAlarm" -> {
-                // Legacy compatibility
-                val id = call.argument<Int>("id")
-                val name = call.argument<String>("name")
-                val type = call.argument<String>("type")
-                val speakText = call.argument<String>("speakText")
-                val triggerAtMillis = call.argument<Long>("triggerAtMillis")
-
-                if (id == null || name == null || type == null || speakText == null || triggerAtMillis == null) {
-                    result.error("INVALID_ARGS", "Missing arguments for scheduleAlarm", null)
-                    return
+        try {
+            when (call.method) {
+                "syncEvents" -> {
+                    val rawEvents = call.argument<List<Map<String, Any>>>("events")
+                    if (rawEvents == null) {
+                        result.error("INVALID_ARGS", "Missing events list", null)
+                        return
+                    }
+                    syncEvents(rawEvents)
+                    result.success(null)
                 }
 
-                val eventMap = mapOf<String, Any>(
-                    "numericId" to id,
-                    "title" to name,
-                    "notificationBody" to speakText,
-                    "spokenMessage" to speakText,
-                    "sourceId" to id.toString(),
-                    "eventType" to type,
-                    "triggerAtMillis" to triggerAtMillis
-                )
-                syncEvents(listOf(eventMap))
-                result.success(null)
-            }
+                "scheduleAlarm" -> {
+                    // Legacy compatibility
+                    val id = (call.argument<Any>("id") as? Number)?.toInt()
+                    val name = call.argument<String>("name")
+                    val type = call.argument<String>("type")
+                    val speakText = call.argument<String>("speakText")
+                    val triggerAtMillis = (call.argument<Any>("triggerAtMillis") as? Number)?.toLong()
 
-            "cancelEventsBySource" -> {
-                val sourceId = call.argument<String>("sourceId")
-                if (sourceId == null) {
-                    result.error("INVALID_ARGS", "Missing sourceId", null)
-                    return
+                    if (id == null || name == null || type == null || speakText == null || triggerAtMillis == null) {
+                        result.error("INVALID_ARGS", "Missing arguments for scheduleAlarm", null)
+                        return
+                    }
+
+                    val eventMap = mapOf<String, Any>(
+                        "numericId" to id,
+                        "title" to name,
+                        "notificationBody" to speakText,
+                        "spokenMessage" to speakText,
+                        "sourceId" to id.toString(),
+                        "eventType" to type,
+                        "triggerAtMillis" to triggerAtMillis
+                    )
+                    syncEvents(listOf(eventMap))
+                    result.success(null)
                 }
-                cancelEventsBySource(sourceId)
-                result.success(null)
-            }
 
-            "cancelAlarm" -> {
-                val id = call.argument<Int>("id")
-                if (id == null) {
-                    result.error("INVALID_ARGS", "Missing id", null)
-                    return
+                "cancelEventsBySource" -> {
+                    val sourceId = call.argument<String>("sourceId") ?: ""
+                    cancelEventsBySource(sourceId)
+                    result.success(null)
                 }
-                cancelAlarm(id)
-                result.success(null)
-            }
 
-            "cancelAllAlarms" -> {
-                cancelAllAlarms()
-                result.success(null)
-            }
+                "cancelAlarm" -> {
+                    val id = (call.argument<Any>("id") as? Number)?.toInt()
+                    if (id != null) {
+                        cancelAlarm(id)
+                    }
+                    result.success(null)
+                }
 
-            "reschedulePendingAlarms" -> {
-                reschedulePendingAlarms()
-                result.success(null)
-            }
+                "cancelAllAlarms" -> {
+                    cancelAllAlarms()
+                    result.success(null)
+                }
 
-            "updateSpokenSetting" -> {
-                val enabled = call.argument<Boolean>("enabled") ?: true
-                updateSpokenSetting(enabled)
-                result.success(null)
-            }
+                "reschedulePendingAlarms" -> {
+                    reschedulePendingAlarms()
+                    result.success(null)
+                }
 
-            else -> result.notImplemented()
+                "updateSpokenSetting" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: true
+                    updateSpokenSetting(enabled)
+                    result.success(null)
+                }
+
+                "updateVoiceSettings" -> {
+                    val voiceGender = call.argument<String>("voiceGender") ?: "female"
+                    val speed = when (val s = call.argument<Any>("speed")) {
+                        is Number -> s.toFloat()
+                        is String -> s.toFloatOrNull() ?: 1.0f
+                        else -> 1.0f
+                    }
+                    updateVoiceSettings(voiceGender, speed)
+                    result.success(null)
+                }
+
+                else -> result.notImplemented()
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "[TimoraAlarm] Error handling onMethodCall(${call.method}): ${e.message}", e)
+            result.success(null) // Never allow unhandled MethodChannel exceptions to crash the application
         }
     }
 
@@ -139,6 +149,16 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
         prefs.edit().putBoolean("spokenAnnouncementsEnabled", enabled).apply()
         Log.d(TAG, "[TimoraAlarm] Spoken announcements setting synced: $enabled")
     }
+
+    fun updateVoiceSettings(voiceGender: String, speed: Float) {
+        val prefs = context.getSharedPreferences(PREFS_EVENTS, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("voiceGender", voiceGender)
+            .putFloat("speakingSpeed", speed)
+            .apply()
+        Log.d(TAG, "[TimoraAlarm] Voice settings synced: gender=$voiceGender, speed=$speed")
+    }
+
 
     fun syncEvents(rawEvents: List<Map<String, Any>>) {
         val prefs = context.getSharedPreferences(PREFS_EVENTS, Context.MODE_PRIVATE)
@@ -195,19 +215,26 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
     }
 
     fun cancelEventsBySource(sourceId: String) {
-        val prefs = context.getSharedPreferences(PREFS_EVENTS, Context.MODE_PRIVATE)
-        val allEntries = prefs.all.filter { it.key.startsWith("evt_") }
+        try {
+            val prefs = context.getSharedPreferences(PREFS_EVENTS, Context.MODE_PRIVATE)
+            val allEntries = prefs.all.filter { it.key.startsWith("evt_") }
 
-        for ((key, value) in allEntries) {
-            try {
-                val json = JSONObject(value as String)
-                if (json.optString("sourceId") == sourceId) {
-                    val numericId = json.optInt("numericId", key.removePrefix("evt_").toIntOrNull() ?: 0)
-                    cancelAlarm(numericId)
+            for ((key, value) in allEntries) {
+                try {
+                    val strValue = value as? String ?: continue
+                    val json = JSONObject(strValue)
+                    if (json.optString("sourceId") == sourceId) {
+                        val numericId = json.optInt("numericId", key.removePrefix("evt_").toIntOrNull() ?: 0)
+                        if (numericId != 0) {
+                            cancelAlarm(numericId)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error checking sourceId for $key: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error checking sourceId for $key: ${e.message}")
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in cancelEventsBySource: ${e.message}")
         }
     }
 

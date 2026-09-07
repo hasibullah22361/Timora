@@ -87,8 +87,10 @@ class RoutineRepository {
     final index = _routines.indexWhere((r) => r.id == routine.id);
     if (index >= 0) {
       _routines[index] = routine.copyWith(updatedAt: DateTime.now());
-      await _saveToStorage();
+    } else {
+      _routines.add(routine);
     }
+    await _saveToStorage();
   }
 
   Future<void> deleteRoutine(String id) async {
@@ -106,8 +108,10 @@ class RoutineRepository {
     final index = _blocks.indexWhere((b) => b.id == block.id);
     if (index >= 0) {
       _blocks[index] = block;
-      await _saveToStorage();
+    } else {
+      _blocks.add(block);
     }
+    await _saveToStorage();
   }
 
   Future<void> deleteRoutineBlock(String id) async {

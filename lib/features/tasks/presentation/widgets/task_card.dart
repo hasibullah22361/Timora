@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:timora/core/theme/app_colors.dart';
 import '../../data/models/task_model.dart';
 import '../providers/task_provider.dart';
 
@@ -17,19 +18,21 @@ class TaskCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isCompleted = task.status == TaskStatus.completed;
 
     final isBlocked = ref.watch(isTaskBlockedProvider(task.id));
 
     return Card(
       elevation: 0,
+      color: isDark ? AppColors.cardDark : AppColors.cardLight,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: isBlocked && !isCompleted
               ? const Color(0xFFF59E0B).withValues(alpha: 0.7)
-              : theme.dividerColor.withValues(alpha: 0.5),
+              : (isDark ? AppColors.borderDark : AppColors.borderLight),
           width: isBlocked && !isCompleted ? 1.5 : 1.0,
         ),
       ),

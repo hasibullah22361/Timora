@@ -34,19 +34,22 @@ class NotificationService {
       android: androidInitialize,
     );
 
-    await _plugin.initialize(
-      settings: initializationSettings,
-      onDidReceiveNotificationResponse: (response) {
-        if (response.payload != null) {
-          onNotificationResponse?.call(response.payload);
-        }
-      },
-      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-    );
+    try {
+      await _plugin.initialize(
+        settings: initializationSettings,
+        onDidReceiveNotificationResponse: (response) {
+          if (response.payload != null) {
+            onNotificationResponse?.call(response.payload);
+          }
+        },
+        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+      );
 
-    await _createChannels();
-
-    _isInitialized = true;
+      await _createChannels();
+      _isInitialized = true;
+    } catch (e) {
+      debugPrint('[NotificationService] Initialization skipped or failed: $e');
+    }
   }
 
   Future<void> _createChannels() async {

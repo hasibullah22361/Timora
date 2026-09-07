@@ -75,11 +75,14 @@ class HabitNotifier extends StateNotifier<AsyncValue<void>> {
     if (goalId != null && goalId.isNotEmpty) {
       _ref.invalidate(goalProgressProvider(goalId));
     }
-    await _ref.read(syncRepositoryProvider).enqueueChange(
-      entityType: 'habit_logs',
-      entityId: '${habitId}_${date.year}${date.month}${date.day}',
-      operation: isCompleted ? SyncOperation.create : SyncOperation.delete,
-    );
+    final logId = _repo.lastToggledLogId;
+    if (logId != null) {
+      await _ref.read(syncRepositoryProvider).enqueueChange(
+        entityType: 'habit_logs',
+        entityId: logId,
+        operation: isCompleted ? SyncOperation.create : SyncOperation.delete,
+      );
+    }
     _ref.read(syncServiceProvider).autoSync();
     return isCompleted;
   }

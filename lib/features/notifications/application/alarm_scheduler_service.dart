@@ -16,10 +16,11 @@ final alarmSchedulerServiceProvider = Provider<AlarmSchedulerService>((ref) {
 /// notification card and speaks the message via native Android TextToSpeech.
 class AlarmSchedulerService {
   static const _channel = MethodChannel('timora/alarm');
+  static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
 
   /// Schedule a batch of [NotificationEvent]s on the native Android scheduler.
   Future<void> syncEvents(List<NotificationEvent> events) async {
-    if (!Platform.isAndroid || events.isEmpty) return;
+    if (!_isAndroid || events.isEmpty) return;
 
     final eventsJson = events.map((e) => e.toJson()).toList();
     try {
@@ -35,7 +36,7 @@ class AlarmSchedulerService {
 
   /// Cancel all native alarms and stored events associated with a specific entity source ID.
   Future<void> cancelEventsBySource(String sourceId) async {
-    if (!Platform.isAndroid || sourceId.isEmpty) return;
+    if (!_isAndroid || sourceId.isEmpty) return;
     try {
       await _channel.invokeMethod('cancelEventsBySource', {'sourceId': sourceId});
       debugPrint('[TimoraAlarm] Cancelled events for sourceId: $sourceId');
@@ -46,7 +47,7 @@ class AlarmSchedulerService {
 
   /// Cancel a specific alarm by its numeric ID.
   Future<void> cancelById(int numericId) async {
-    if (!Platform.isAndroid) return;
+    if (!_isAndroid) return;
     try {
       await _channel.invokeMethod('cancelAlarm', {'id': numericId});
       debugPrint('[TimoraAlarm] Cancelled alarm id=$numericId');
@@ -57,7 +58,7 @@ class AlarmSchedulerService {
 
   /// Cancel all scheduled alarms and clear persistent store.
   Future<void> cancelAllAlarms() async {
-    if (!Platform.isAndroid) return;
+    if (!_isAndroid) return;
     try {
       await _channel.invokeMethod('cancelAllAlarms');
       debugPrint('[TimoraAlarm] Cancelled all alarms');
@@ -68,7 +69,7 @@ class AlarmSchedulerService {
 
   /// Immediately synchronize spoken announcements setting to Android native SharedPreferences.
   Future<void> updateSpokenSetting(bool enabled) async {
-    if (!Platform.isAndroid) return;
+    if (!_isAndroid) return;
     try {
       await _channel.invokeMethod('updateSpokenSetting', {'enabled': enabled});
       debugPrint('[TimoraAlarm] updateSpokenSetting sent to Android: $enabled');
@@ -76,6 +77,21 @@ class AlarmSchedulerService {
       debugPrint('[TimoraAlarm] updateSpokenSetting error: $e');
     }
   }
+
+  /// Synchronize voice gender and speaking speed to Android native SharedPreferences.
+  Future<void> updateVoiceSettings({required String voiceGender, required double speed}) async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod('updateVoiceSettings', {
+        'voiceGender': voiceGender,
+        'speed': speed,
+      });
+      debugPrint('[TimoraAlarm] updateVoiceSettings sent to Android: gender=$voiceGender, speed=$speed');
+    } catch (e) {
+      debugPrint('[TimoraAlarm] updateVoiceSettings error: $e');
+    }
+  }
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // LEGACY COMPATIBILITY HELPERS

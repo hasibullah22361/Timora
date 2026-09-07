@@ -32,8 +32,10 @@ import '../../settings/data/models/settings_models.dart';
 import '../../home/presentation/providers/home_provider.dart';
 import '../../diary/data/models/diary_entry_model.dart';
 import '../../diary/data/repositories/diary_repository.dart';
+import '../../diary/presentation/providers/diary_provider.dart';
 import '../../habits/presentation/providers/habit_provider.dart';
 import '../../habits/data/models/habit_model.dart';
+import '../../habits/data/models/habit_log_model.dart';
 import '../../habits/data/repositories/habit_repository.dart';
 import '../../daily_plan/data/models/daily_plan_model.dart';
 import '../../daily_plan/data/models/planned_task_block_model.dart';
@@ -42,6 +44,18 @@ import '../../weekly_plan/data/models/weekly_plan_model.dart';
 import '../../weekly_plan/data/repositories/weekly_plan_repository.dart';
 import '../../monthly_plan/data/models/monthly_plan_model.dart';
 import '../../monthly_plan/data/repositories/monthly_plan_repository.dart';
+import '../../career/data/models/career_document_model.dart';
+import '../../career/data/repositories/career_document_repository.dart';
+import '../../career/data/models/career_roadmap_model.dart';
+import '../../career/data/models/career_milestone_model.dart';
+import '../../career/data/repositories/career_roadmap_repository.dart';
+import '../../schedule/data/models/autopilot_action_model.dart';
+import '../../schedule/data/repositories/autopilot_action_repository.dart';
+import '../../analytics/data/models/productivity_event_model.dart';
+import '../../analytics/data/repositories/productivity_event_repository.dart';
+import '../../analytics/services/productivity_event_service.dart';
+import '../../analytics/services/consistency_score_service.dart';
+import '../../analytics/services/report_generator_service.dart';
 
 final syncServiceProvider = Provider<SyncService>((ref) {
   final service = SyncService(ref);
@@ -119,8 +133,15 @@ class SyncService {
   }
 
   void _handleRealtimeEvent(PostgresChangePayload payload) {
-    // When a change is detected on Supabase, trigger a pull to merge changes locally
-    autoSync();
+    debugPrint('[Sync] Realtime change on table: ${payload.table}, triggering syncNow...');
+    syncNow();
+  }
+
+  void onUserSignedOut() {
+    _unsubscribeRealtime();
+    try {
+      _ref.read(globalSyncStatusProvider.notifier).state = SyncStatus.offline;
+    } catch (_) {}
   }
 
   void dispose() {
@@ -147,12 +168,11 @@ class SyncService {
   }
 
   Future<void> autoSync() async {
-    final syncRepo = _ref.read(syncRepositoryProvider);
-    final pending = await syncRepo.getPendingItems();
-    if (pending.isEmpty) return;
-    
-    // Attempt sync
     try {
+      final provider = _ref.read(cloudSyncProvider);
+      final user = await provider.getCurrentUser();
+      if (user == null || !user.syncEnabled) return;
+
       await syncNow();
     } catch (_) {
       // Ignored for auto-sync; error status handled in syncNow
@@ -191,12 +211,90 @@ class SyncService {
     }
   }
 
+  int _entityPriority(String entityType, bool isDelete) {
+    int rank;
+    switch (entityType) {
+      case 'user_profile':
+      case 'settings':
+        rank = 1;
+        break;
+      case 'projects':
+      case 'goals':
+      case 'career_roadmaps':
+        rank = 2;
+        break;
+      case 'milestones':
+      case 'career_milestones':
+        rank = 3;
+        break;
+      case 'routines':
+        rank = 4;
+        break;
+      case 'routine_blocks':
+        rank = 5;
+        break;
+      case 'tasks':
+        rank = 6;
+        break;
+      case 'subtasks':
+        rank = 7;
+        break;
+      case 'schedule_activities':
+        rank = 8;
+        break;
+      case 'habits':
+        rank = 9;
+        break;
+      case 'habit_logs':
+        rank = 10;
+        break;
+      case 'daily_plans':
+        rank = 11;
+        break;
+      case 'planned_task_blocks':
+      case 'daily_plan_blocks':
+        rank = 12;
+        break;
+      case 'weekly_plans':
+      case 'monthly_plans':
+      case 'career_documents':
+        rank = 13;
+        break;
+      case 'autopilot_actions':
+        rank = 14;
+        break;
+      case 'productivity_events':
+        rank = 15;
+        break;
+      case 'diary_entries':
+      default:
+        rank = 16;
+        break;
+    }
+    return isDelete ? (100 - rank) : rank;
+  }
+
   Future<void> _pushChanges() async {
     final syncRepo = _ref.read(syncRepositoryProvider);
     final provider = _ref.read(cloudSyncProvider);
     
     final pending = await syncRepo.getPendingItems();
     if (pending.isEmpty) return;
+
+    // Sort pending items topologically:
+    // Upserts: parents before children (e.g. routines before routine_blocks, tasks before subtasks)
+    // Deletions: children before parents (e.g. subtasks before tasks)
+    final sortedPending = List<SyncQueueItem>.from(pending);
+    sortedPending.sort((a, b) {
+      final isDelA = a.operation == SyncOperation.delete;
+      final isDelB = b.operation == SyncOperation.delete;
+      if (isDelA != isDelB) {
+        return isDelA ? 1 : -1;
+      }
+      final prioA = _entityPriority(a.entityType, isDelA);
+      final prioB = _entityPriority(b.entityType, isDelB);
+      return prioA.compareTo(prioB);
+    });
 
     final payloads = <String, dynamic>{};
     
@@ -213,8 +311,12 @@ class SyncService {
     final dailyPlanRepo = _ref.read(dailyPlanRepositoryProvider);
     final weeklyPlanRepo = _ref.read(weeklyPlanRepositoryProvider);
     final monthlyPlanRepo = _ref.read(monthlyPlanRepositoryProvider);
+    final careerRoadmapRepo = _ref.read(careerRoadmapRepositoryProvider);
+    final careerDocRepo = _ref.read(careerDocumentRepositoryProvider);
+    final autopilotRepo = _ref.read(autopilotActionRepositoryProvider);
+    final eventRepo = _ref.read(productivityEventRepositoryProvider);
 
-    // Preload datasets
+    // Preload datasets for fast lookup
     final tasks = await taskRepo.getTasks();
     final subtasks = await taskRepo.getAllSubtasks();
     final routines = await routineRepo.getAllRoutines();
@@ -227,8 +329,13 @@ class SyncService {
     final settings = settingsRepo.loadSettings();
     final diaryEntries = await diaryRepo.getAllEntries();
     final habits = await habitRepo.getHabits();
+    final careerRoadmaps = await careerRoadmapRepo.getRoadmaps();
+    final careerMilestones = await careerRoadmapRepo.getAllMilestones();
+    final careerDocuments = await careerDocRepo.getDocuments();
+    final autopilotActions = await autopilotRepo.getAllActions();
+    final productivityEvents = await eventRepo.getAllEvents();
 
-    for (var item in pending) {
+    for (var item in sortedPending) {
       if (item.operation == SyncOperation.delete) continue;
 
       switch (item.entityType) {
@@ -278,29 +385,58 @@ class SyncService {
           final h = habits.where((x) => x.id == item.entityId).firstOrNull;
           if (h != null) payloads[item.entityId] = h.toJson();
           break;
+        case 'habit_logs':
+          final log = await habitRepo.getLogById(item.entityId);
+          if (log != null) payloads[item.entityId] = log.toJson();
+          break;
         case 'daily_plans':
-          final dp = await dailyPlanRepo.getPlanForDate(DateTime.now());
-          if (dp != null && dp.id == item.entityId) payloads[item.entityId] = dp.toJson();
+          final dp = await dailyPlanRepo.getPlanById(item.entityId);
+          if (dp != null) payloads[item.entityId] = dp.toJson();
+          break;
+        case 'planned_task_blocks':
+        case 'daily_plan_blocks':
+          final block = await dailyPlanRepo.getBlockById(item.entityId);
+          if (block != null) payloads[item.entityId] = block.toJson();
           break;
         case 'weekly_plans':
-          final wp = await weeklyPlanRepo.getPlanForWeek(DateTime.now());
-          if (wp != null && wp.id == item.entityId) payloads[item.entityId] = wp.toJson();
+          final wp = await weeklyPlanRepo.getPlanById(item.entityId);
+          if (wp != null) payloads[item.entityId] = wp.toJson();
           break;
         case 'monthly_plans':
-          final mp = await monthlyPlanRepo.getPlanForMonth(DateTime.now().year, DateTime.now().month);
-          if (mp != null && mp.id == item.entityId) payloads[item.entityId] = mp.toJson();
+          final mp = await monthlyPlanRepo.getPlanById(item.entityId);
+          if (mp != null) payloads[item.entityId] = mp.toJson();
+          break;
+        case 'career_roadmaps':
+          final rm = careerRoadmaps.where((x) => x.id == item.entityId).firstOrNull;
+          if (rm != null) payloads[item.entityId] = rm.toJson();
+          break;
+        case 'career_milestones':
+          final cm = careerMilestones.where((x) => x.id == item.entityId).firstOrNull;
+          if (cm != null) payloads[item.entityId] = cm.toJson();
+          break;
+        case 'career_documents':
+          final cd = careerDocuments.where((x) => x.id == item.entityId).firstOrNull;
+          if (cd != null) payloads[item.entityId] = cd.toJson();
+          break;
+        case 'autopilot_actions':
+          final aa = autopilotActions.where((x) => x.id == item.entityId).firstOrNull;
+          if (aa != null) payloads[item.entityId] = aa.toJson();
+          break;
+        case 'productivity_events':
+          final pe = productivityEvents.where((x) => x.id == item.entityId).firstOrNull;
+          if (pe != null) payloads[item.entityId] = pe.toJson();
           break;
       }
     }
 
     try {
-      await provider.pushChanges(pending, payloads);
+      await provider.pushChanges(sortedPending, payloads);
       // On success, mark items synced
-      for (var item in pending) {
+      for (var item in sortedPending) {
         await syncRepo.markItemSynced(item.id);
       }
     } catch (e) {
-      for (var item in pending) {
+      for (var item in sortedPending) {
         await syncRepo.markItemFailed(item.id, e.toString());
       }
       rethrow;
@@ -326,197 +462,272 @@ class SyncService {
     final dailyPlanRepo = _ref.read(dailyPlanRepositoryProvider);
     final weeklyPlanRepo = _ref.read(weeklyPlanRepositoryProvider);
     final monthlyPlanRepo = _ref.read(monthlyPlanRepositoryProvider);
+    final careerRoadmapRepo = _ref.read(careerRoadmapRepositoryProvider);
+    final careerDocRepo = _ref.read(careerDocumentRepositoryProvider);
+    final autopilotRepo = _ref.read(autopilotActionRepositoryProvider);
+    final eventRepo = _ref.read(productivityEventRepositoryProvider);
 
-    for (var entry in changes.entries) {
+    // Sort pulled entries in topological order (parents before children for inserts/updates)
+    final sortedEntries = changes.entries.toList();
+    sortedEntries.sort((a, b) {
+      final isDelA = a.value['_deletedAt'] != null;
+      final isDelB = b.value['_deletedAt'] != null;
+      final typeA = a.value['_entityType'] as String? ?? '';
+      final typeB = b.value['_entityType'] as String? ?? '';
+      if (isDelA != isDelB) {
+        return isDelA ? 1 : -1;
+      }
+      final prioA = _entityPriority(typeA, isDelA);
+      final prioB = _entityPriority(typeB, isDelB);
+      return prioA.compareTo(prioB);
+    });
+
+    for (var entry in sortedEntries) {
       final id = entry.key;
       final record = entry.value;
-      
-      final isDeleted = record['_deletedAt'] != null;
-      final entityType = record['_entityType'] as String? ?? 'tasks';
-      final serverUpdatedAt = record['_serverUpdatedAt'] != null
-          ? DateTime.parse(record['_serverUpdatedAt'] as String)
-          : DateTime.now();
 
-      final localMeta = await syncRepo.getMetadata(id);
-      
-      // Conflict Resolution: Last-Write-Wins
-      if (localMeta != null && localMeta.localUpdatedAt.isAfter(serverUpdatedAt)) {
-        // Local is newer. Ignore server change for now; it will push in next cycle.
-        continue;
+      try {
+        final isDeleted = record['_deletedAt'] != null;
+        final entityType = record['_entityType'] as String? ?? 'tasks';
+        final serverUpdatedAt = record['_serverUpdatedAt'] != null
+            ? (DateTime.tryParse(record['_serverUpdatedAt'].toString()) ?? DateTime.now())
+            : DateTime.now();
+
+        final localMeta = await syncRepo.getMetadata(id);
+
+        // Conflict Resolution: Last-Write-Wins
+        if (localMeta != null && localMeta.localUpdatedAt.isAfter(serverUpdatedAt)) {
+          // Local is newer. Ignore server change for now; it will push in next cycle.
+          continue;
+        }
+
+        // Apply server change locally
+        switch (entityType) {
+          case 'tasks':
+            if (isDeleted) {
+              await taskRepo.deleteTask(id);
+            } else {
+              final task = TaskModel.fromJson(record);
+              final existing = await taskRepo.getTask(id);
+              if (existing != null) {
+                await taskRepo.updateTask(task);
+              } else {
+                await taskRepo.createTask(task);
+              }
+            }
+            break;
+
+          case 'subtasks':
+            if (isDeleted) {
+              await taskRepo.deleteSubtask(id);
+            } else {
+              final subtask = SubtaskModel.fromJson(record);
+              await taskRepo.updateSubtask(subtask);
+            }
+            break;
+
+          case 'routines':
+            if (isDeleted) {
+              await routineRepo.deleteRoutine(id);
+            } else {
+              final routine = Routine.fromJson(record);
+              await routineRepo.updateRoutine(routine);
+            }
+            break;
+
+          case 'routine_blocks':
+            if (isDeleted) {
+              await routineRepo.deleteRoutineBlock(id);
+            } else {
+              final block = RoutineBlock.fromJson(record);
+              await routineRepo.updateRoutineBlock(block);
+            }
+            break;
+
+          case 'schedule_activities':
+            if (isDeleted) {
+              await scheduleRepo.deleteActivity(id);
+            } else {
+              final act = ScheduleActivity.fromJson(record);
+              await scheduleRepo.updateActivity(act);
+            }
+            break;
+
+          case 'goals':
+            if (isDeleted) {
+              await goalRepo.deleteGoal(id);
+            } else {
+              final goal = GoalModel.fromJson(record);
+              final existing = await goalRepo.getGoal(id);
+              if (existing != null) {
+                await goalRepo.updateGoal(goal);
+              } else {
+                await goalRepo.createGoal(goal);
+              }
+            }
+            break;
+
+          case 'milestones':
+            if (isDeleted) {
+              await goalRepo.deleteMilestone(id);
+            } else {
+              final milestone = MilestoneModel.fromJson(record);
+              await goalRepo.updateMilestone(milestone);
+            }
+            break;
+
+          case 'projects':
+            if (isDeleted) {
+              await projectRepo.deleteProject(id);
+            } else {
+              final project = ProjectModel.fromJson(record);
+              final existing = await projectRepo.getProject(id);
+              if (existing != null) {
+                await projectRepo.updateProject(project);
+              } else {
+                await projectRepo.createProject(project);
+              }
+            }
+            break;
+
+          case 'user_profile':
+            if (!isDeleted) {
+              final profile = UserProfile.fromJson(record);
+              await profileRepo.saveProfile(profile);
+            }
+            break;
+
+          case 'settings':
+            if (!isDeleted) {
+              final settings = AppSettings.fromJson(record);
+              await settingsRepo.saveSettings(settings);
+            }
+            break;
+
+          case 'diary_entries':
+            if (isDeleted) {
+              await diaryRepo.deleteEntry(id);
+            } else {
+              final diaryEntry = DiaryEntryModel.fromSupabaseMap(record);
+              await diaryRepo.saveEntry(diaryEntry);
+            }
+            break;
+
+          case 'habits':
+            if (isDeleted) {
+              await habitRepo.deleteHabit(id);
+            } else {
+              final habit = HabitModel.fromJson(record);
+              final existing = await habitRepo.getHabit(id);
+              if (existing != null) {
+                await habitRepo.updateHabit(habit);
+              } else {
+                await habitRepo.createHabit(habit);
+              }
+            }
+            break;
+
+          case 'habit_logs':
+            if (isDeleted) {
+              await habitRepo.deleteHabitLog(id);
+            } else {
+              final log = HabitLogModel.fromJson(record);
+              await habitRepo.saveHabitLog(log);
+            }
+            break;
+
+          case 'daily_plans':
+            if (isDeleted) {
+              await dailyPlanRepo.deletePlan(id);
+            } else {
+              final plan = DailyPlanModel.fromJson(record);
+              await dailyPlanRepo.savePlan(plan);
+            }
+            break;
+
+          case 'planned_task_blocks':
+          case 'daily_plan_blocks':
+            if (isDeleted) {
+              await dailyPlanRepo.deleteBlock(id);
+            } else {
+              final block = PlannedTaskBlockModel.fromJson(record);
+              await dailyPlanRepo.saveBlock(block);
+            }
+            break;
+
+          case 'weekly_plans':
+            if (isDeleted) {
+              await weeklyPlanRepo.deletePlan(id);
+            } else {
+              final plan = WeeklyPlanModel.fromJson(record);
+              await weeklyPlanRepo.savePlan(plan);
+            }
+            break;
+
+          case 'monthly_plans':
+            if (isDeleted) {
+              await monthlyPlanRepo.deletePlan(id);
+            } else {
+              final plan = MonthlyPlanModel.fromJson(record);
+              await monthlyPlanRepo.savePlan(plan);
+            }
+            break;
+
+          case 'career_roadmaps':
+            if (!isDeleted) {
+              final rm = CareerRoadmapModel.fromJson(record);
+              await careerRoadmapRepo.saveRoadmap(rm);
+            }
+            break;
+
+          case 'career_milestones':
+            if (isDeleted) {
+              final rId = record['roadmap_id'] as String? ?? '';
+              await careerRoadmapRepo.deleteMilestone(id, rId);
+            } else {
+              final cm = CareerMilestoneModel.fromJson(record);
+              await careerRoadmapRepo.saveMilestone(cm);
+            }
+            break;
+
+          case 'career_documents':
+            if (isDeleted) {
+              await careerDocRepo.deleteDocument(id);
+            } else {
+              final cd = CareerDocumentModel.fromJson(record);
+              await careerDocRepo.savePulledDocument(cd);
+            }
+            break;
+
+          case 'autopilot_actions':
+            if (!isDeleted) {
+              final aa = AutopilotActionModel.fromJson(record);
+              await autopilotRepo.savePulledAction(aa);
+            }
+            break;
+
+          case 'productivity_events':
+            if (isDeleted) {
+              await eventRepo.deleteEvent(id);
+            } else {
+              final pe = ProductivityEventModel.fromJson(record);
+              await eventRepo.savePulledEvent(pe);
+            }
+            break;
+        }
+
+        // Update sync metadata
+        await syncRepo.saveMetadata(SyncMetadata(
+          entityId: id,
+          entityType: entityType,
+          localUpdatedAt: serverUpdatedAt,
+          remoteUpdatedAt: serverUpdatedAt,
+          lastSyncedAt: DateTime.now(),
+          deletedAt: isDeleted ? serverUpdatedAt : null,
+        ));
+      } catch (itemError) {
+        debugPrint('[Sync] Notice: failed to apply pulled record $id: $itemError');
       }
-
-      // Apply server change locally
-      switch (entityType) {
-        case 'tasks':
-          if (isDeleted) {
-            await taskRepo.deleteTask(id);
-          } else {
-            final task = TaskModel.fromJson(record);
-            final existing = await taskRepo.getTask(id);
-            if (existing != null) {
-              await taskRepo.updateTask(task);
-            } else {
-              await taskRepo.createTask(task);
-            }
-          }
-          break;
-
-        case 'subtasks':
-          if (isDeleted) {
-            await taskRepo.deleteSubtask(id);
-          } else {
-            final subtask = SubtaskModel.fromJson(record);
-            await taskRepo.createSubtask(subtask);
-          }
-          break;
-
-        case 'routines':
-          if (isDeleted) {
-            await routineRepo.deleteRoutine(id);
-          } else {
-            final routine = Routine.fromJson(record);
-            await routineRepo.updateRoutine(routine);
-          }
-          break;
-
-        case 'routine_blocks':
-          if (isDeleted) {
-            await routineRepo.deleteRoutineBlock(id);
-          } else {
-            final block = RoutineBlock.fromJson(record);
-            await routineRepo.updateRoutineBlock(block);
-          }
-          break;
-
-        case 'schedule_activities':
-          if (isDeleted) {
-            await scheduleRepo.deleteActivity(id);
-          } else {
-            final act = ScheduleActivity.fromJson(record);
-            await scheduleRepo.updateActivity(act);
-          }
-          break;
-
-        case 'goals':
-          if (isDeleted) {
-            await goalRepo.deleteGoal(id);
-          } else {
-            final goal = GoalModel.fromJson(record);
-            final existing = await goalRepo.getGoal(id);
-            if (existing != null) {
-              await goalRepo.updateGoal(goal);
-            } else {
-              await goalRepo.createGoal(goal);
-            }
-          }
-          break;
-
-        case 'milestones':
-          if (isDeleted) {
-            await goalRepo.deleteMilestone(id);
-          } else {
-            final milestone = MilestoneModel.fromJson(record);
-            await goalRepo.updateMilestone(milestone);
-          }
-          break;
-
-        case 'projects':
-          if (isDeleted) {
-            await projectRepo.deleteProject(id);
-          } else {
-            final project = ProjectModel.fromJson(record);
-            final existing = await projectRepo.getProject(id);
-            if (existing != null) {
-              await projectRepo.updateProject(project);
-            } else {
-              await projectRepo.createProject(project);
-            }
-          }
-          break;
-
-        case 'user_profile':
-          if (!isDeleted) {
-            final profile = UserProfile.fromJson(record);
-            await profileRepo.saveProfile(profile);
-          }
-          break;
-
-        case 'settings':
-          if (!isDeleted) {
-            final settings = AppSettings.fromJson(record);
-            await settingsRepo.saveSettings(settings);
-          }
-          break;
-
-        case 'diary_entries':
-          if (isDeleted) {
-            await diaryRepo.deleteEntry(id);
-          } else {
-            final diaryEntry = DiaryEntryModel.fromSupabaseMap(record);
-            await diaryRepo.saveEntry(diaryEntry);
-          }
-          break;
-
-        case 'habits':
-          if (isDeleted) {
-            await habitRepo.deleteHabit(id);
-          } else {
-            final habit = HabitModel.fromJson(record);
-            final existing = await habitRepo.getHabit(id);
-            if (existing != null) {
-              await habitRepo.updateHabit(habit);
-            } else {
-              await habitRepo.createHabit(habit);
-            }
-          }
-          break;
-
-        case 'daily_plans':
-          if (isDeleted) {
-            await dailyPlanRepo.deletePlan(id);
-          } else {
-            final plan = DailyPlanModel.fromJson(record);
-            await dailyPlanRepo.savePlan(plan);
-          }
-          break;
-
-        case 'planned_task_blocks':
-          if (isDeleted) {
-            await dailyPlanRepo.deleteBlock(id);
-          } else {
-            final block = PlannedTaskBlockModel.fromJson(record);
-            await dailyPlanRepo.saveBlock(block);
-          }
-          break;
-
-        case 'weekly_plans':
-          if (isDeleted) {
-            await weeklyPlanRepo.deletePlan(id);
-          } else {
-            final plan = WeeklyPlanModel.fromJson(record);
-            await weeklyPlanRepo.savePlan(plan);
-          }
-          break;
-
-        case 'monthly_plans':
-          if (isDeleted) {
-            await monthlyPlanRepo.deletePlan(id);
-          } else {
-            final plan = MonthlyPlanModel.fromJson(record);
-            await monthlyPlanRepo.savePlan(plan);
-          }
-          break;
-      }
-
-      // Update sync metadata
-      await syncRepo.saveMetadata(SyncMetadata(
-        entityId: id,
-        entityType: entityType,
-        localUpdatedAt: serverUpdatedAt,
-        remoteUpdatedAt: serverUpdatedAt,
-        lastSyncedAt: DateTime.now(),
-        deletedAt: isDeleted ? serverUpdatedAt : null,
-      ));
     }
 
     // Invalidate related Riverpod providers so the UI immediately refreshes everywhere
@@ -533,13 +744,34 @@ class SyncService {
     _ref.invalidate(allProjectsProvider);
     _ref.invalidate(activeProjectsProvider);
     _ref.invalidate(allHabitsProvider);
+    _ref.invalidate(allDiaryEntriesProvider);
+    _ref.invalidate(diaryEntryForSelectedDateProvider);
+    _ref.invalidate(diaryStreakStatsProvider);
     _ref.invalidate(userProfileProvider);
     _ref.invalidate(settingsProvider);
+    _ref.invalidate(dailyPlanRepositoryProvider);
+    _ref.invalidate(weeklyPlanRepositoryProvider);
+    _ref.invalidate(monthlyPlanRepositoryProvider);
+    _ref.invalidate(activeRoadmapProvider);
+    _ref.invalidate(allCareerDocumentsProvider);
+    _ref.invalidate(autopilotHistoryProvider);
+    _ref.invalidate(allProductivityEventsProvider);
+    _ref.invalidate(weeklyConsistencyScoreProvider);
+    _ref.invalidate(dailyReportProvider);
+    _ref.invalidate(weeklyReportProvider);
+    _ref.invalidate(monthlyReportProvider);
+    _ref.invalidate(whatShouldIDoNowProvider);
   }
 
   /// Full restore: pulls all user data from Supabase on login/reinstall.
   /// This is called after successful authentication to restore cloud data.
   Future<void> fullRestore() async {
+    // If a sync is currently in progress, wait briefly for it to complete
+    int retries = 0;
+    while (_isSyncing && retries < 20) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      retries++;
+    }
     if (_isSyncing) return;
     _isSyncing = true;
 
@@ -559,14 +791,14 @@ class SyncService {
       // Ensure realtime is connected
       _subscribeRealtime(user.userId);
 
-      // Pull all cloud data (no lastSyncedAt filter = full pull)
+      // CRITICAL: Pull all cloud data FIRST so empty local storage never overwrites cloud
       await _pullChanges();
 
-      // Push any local offline changes
+      // Then push any local offline changes (if any existed)
       await _pushChanges();
 
       statusNotifier.state = SyncStatus.synced;
-      debugPrint('[Sync] Full restore completed for user ${user.userId}');
+      debugPrint('[Sync] Full restore completed successfully for user ${user.userId}');
     } catch (e) {
       statusNotifier.state = SyncStatus.failed;
       debugPrint('[Sync] Full restore error: $e');

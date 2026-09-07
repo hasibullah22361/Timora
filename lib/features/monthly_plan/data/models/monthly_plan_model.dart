@@ -56,19 +56,27 @@ class MonthlyPlanModel {
   }
 
   factory MonthlyPlanModel.fromJson(Map<String, dynamic> json) {
+    final now = DateTime.now();
+    final y = (json['year'] ?? json['plan_year']) as int? ?? now.year;
+    final m = (json['month'] ?? json['plan_month']) as int? ?? now.month;
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final planSec = (json['plannedDurationSeconds'] ?? json['planned_duration_seconds']) as int? ?? 0;
+    final focusSec = (json['targetFocusDurationSeconds'] ?? json['target_focus_duration_seconds']) as int? ?? 0;
+
     return MonthlyPlanModel(
       id: json['id'] as String,
-      year: json['year'] as int,
-      month: json['month'] as int,
+      year: y,
+      month: m,
       status: json['status'] as String? ?? 'draft',
       notes: json['notes'] as String? ?? '',
-      plannedDurationSeconds: json['plannedDurationSeconds'] as int? ?? 0,
-      targetFocusDurationSeconds: json['targetFocusDurationSeconds'] as int? ?? 0,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      plannedDurationSeconds: planSec,
+      targetFocusDurationSeconds: focusSec,
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? now)
+          : now,
+      updatedAt: updatedRaw != null
+          ? DateTime.tryParse(updatedRaw.toString())
           : null,
     );
   }

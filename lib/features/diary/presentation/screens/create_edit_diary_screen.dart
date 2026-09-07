@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -837,26 +838,38 @@ class _CreateEditDiaryScreenState extends ConsumerState<CreateEditDiaryScreen> {
                     itemCount: _photoPaths.length,
                     itemBuilder: (context, index) {
                       final path = _photoPaths[index];
-                      final file = File(path);
                       return Padding(
                         padding: const EdgeInsets.only(right: 10.0),
                         child: Stack(
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: file.existsSync()
-                                  ? Image.file(
-                                      file,
+                              child: kIsWeb
+                                  ? Image.network(
+                                      path,
                                       width: 90,
                                       height: 90,
                                       fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 90,
+                                        height: 90,
+                                        color: Colors.grey.shade300,
+                                        child: const Icon(Icons.broken_image),
+                                      ),
                                     )
-                                  : Container(
-                                      width: 90,
-                                      height: 90,
-                                      color: Colors.grey.shade300,
-                                      child: const Icon(Icons.broken_image),
-                                    ),
+                                  : (File(path).existsSync()
+                                      ? Image.file(
+                                          File(path),
+                                          width: 90,
+                                          height: 90,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Container(
+                                          width: 90,
+                                          height: 90,
+                                          color: Colors.grey.shade300,
+                                          child: const Icon(Icons.broken_image),
+                                        )),
                             ),
                             Positioned(
                               top: 4,

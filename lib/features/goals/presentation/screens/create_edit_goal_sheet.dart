@@ -61,7 +61,7 @@ class _CreateEditGoalSheetState extends ConsumerState<CreateEditGoalSheet> {
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final isNew = widget.goalToEdit == null;
@@ -81,12 +81,12 @@ class _CreateEditGoalSheetState extends ConsumerState<CreateEditGoalSheet> {
     );
 
     if (isNew) {
-      ref.read(goalNotifierProvider).createGoal(goal);
+      await ref.read(goalNotifierProvider).createGoal(goal);
     } else {
-      ref.read(goalNotifierProvider).updateGoal(goal);
+      await ref.read(goalNotifierProvider).updateGoal(goal);
     }
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   @override

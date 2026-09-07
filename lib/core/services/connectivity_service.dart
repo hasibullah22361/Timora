@@ -72,6 +72,7 @@ class ConnectivityService {
   /// Actually ping a server to verify internet connectivity.
   /// Wi-Fi connected does NOT guarantee internet access.
   Future<bool> _hasActualInternet() async {
+    if (kIsWeb) return true;
     try {
       final result = await InternetAddress.lookup('google.com')
           .timeout(const Duration(seconds: 5));

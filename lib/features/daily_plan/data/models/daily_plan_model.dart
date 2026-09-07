@@ -49,20 +49,27 @@ class DailyPlanModel {
   }
 
   factory DailyPlanModel.fromJson(Map<String, dynamic> json) {
+    final now = DateTime.now();
+    final dateRaw = json['date'] ?? json['plan_date'];
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final plannedSec = (json['plannedDurationSeconds'] ?? json['planned_duration_seconds']) as int? ?? 0;
+    final compSec = (json['completedDurationSeconds'] ?? json['completed_duration_seconds']) as int? ?? 0;
+
     return DailyPlanModel(
       id: json['id'] as String,
-      date: DateTime.parse(json['date'] as String),
+      date: dateRaw != null ? (DateTime.tryParse(dateRaw.toString()) ?? now) : now,
       status: DailyPlanStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => DailyPlanStatus.draft,
       ),
-      plannedDurationSeconds: json['plannedDurationSeconds'] as int? ?? 0,
-      completedDurationSeconds: json['completedDurationSeconds'] as int? ?? 0,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      plannedDurationSeconds: plannedSec,
+      completedDurationSeconds: compSec,
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? now)
+          : now,
+      updatedAt: updatedRaw != null
+          ? DateTime.tryParse(updatedRaw.toString())
           : null,
     );
   }

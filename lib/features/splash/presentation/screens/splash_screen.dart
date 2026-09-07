@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/timora_branding.dart';
 import '../../../auth/data/auth_repository.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
 import '../../../main_layout/presentation/screens/main_layout_screen.dart';
 import '../../../onboarding/data/onboarding_repository.dart';
@@ -31,14 +32,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
 
     _animationController.forward();
 
-    Future.delayed(const Duration(milliseconds: 2400), () {
-      _checkAuthAndNavigate();
-    });
+    _initializeAppAndNavigate();
   }
 
-  void _checkAuthAndNavigate() {
+  Future<void> _initializeAppAndNavigate() async {
+    // 1. Allow splash fade animation to display
+    await Future.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
-    
+
     final onboardingRepo = ref.read(onboardingRepositoryProvider);
     final isComplete = onboardingRepo.isOnboardingComplete();
 
@@ -49,14 +50,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       return;
     }
 
+    // 2. Asynchronously restore / refresh session via AuthRepository
     final authRepo = ref.read(authRepositoryProvider);
-    final session = authRepo.getCurrentSession();
+    final session = await authRepo.restoreSession();
+    if (!mounted) return;
 
-    if (session != null && session.isValid) {
+    // 3. Confirm authenticated state: either restored session or authController has user
+    final authState = ref.read(authControllerProvider);
+    final isAuthenticated = (session != null && session.isValid) || authState.isAuthenticated;
+
+    if (isAuthenticated) {
+      debugPrint('[Splash] Authenticated session confirmed, entering application.');
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainLayoutScreen()),
       );
     } else {
+      debugPrint('[Splash] No active session found, routing to LoginScreen.');
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
       );

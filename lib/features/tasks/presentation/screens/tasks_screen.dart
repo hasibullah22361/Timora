@@ -6,6 +6,7 @@ import '../widgets/task_card.dart';
 import 'create_edit_task_sheet.dart';
 import 'task_details_screen.dart';
 
+import 'package:timora/core/theme/app_colors.dart';
 import 'package:timora/features/quick_add/presentation/widgets/quick_add_sheet.dart';
 
 class TasksScreen extends ConsumerWidget {
@@ -14,12 +15,13 @@ class TasksScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final searchQuery = ref.watch(taskSearchQueryProvider);
     
     // We only use the "all tasks" provider here if searching, otherwise we split by category
     
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Tasks', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
@@ -42,7 +44,11 @@ class TasksScreen extends ConsumerWidget {
                 leading: const Icon(Icons.search),
                 onChanged: (val) => ref.read(taskSearchQueryProvider.notifier).state = val,
                 elevation: WidgetStateProperty.all(0),
-                backgroundColor: WidgetStateProperty.all(theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
+                backgroundColor: WidgetStateProperty.all(isDark ? AppColors.cardDark : AppColors.cardLight),
+                shape: WidgetStateProperty.all(RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                )),
                 padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 16)),
               ),
             ),
@@ -57,6 +63,7 @@ class TasksScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'tasks_fab',
         onPressed: () {
           showModalBottomSheet(
             context: context,

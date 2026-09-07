@@ -8,6 +8,24 @@ import 'package:timora/features/auth/presentation/providers/auth_provider.dart';
 import 'package:timora/features/tasks/data/models/task_model.dart';
 import 'package:timora/features/tasks/data/repositories/task_repository.dart';
 
+class FakeSession extends Fake implements supabase.Session {
+  @override
+  final String accessToken;
+  @override
+  final supabase.User user;
+  @override
+  final bool isExpired;
+  @override
+  final int? expiresAt;
+
+  FakeSession({
+    required this.accessToken,
+    required this.user,
+    this.isExpired = false,
+    this.expiresAt,
+  });
+}
+
 /// Test client that simulates Supabase Auth backend responses
 class FakeSupabaseAuthClient extends Fake implements supabase.GoTrueClient {
   final Map<String, Map<String, dynamic>> _registeredUsers = {};
@@ -197,6 +215,29 @@ class FakeSupabaseAuthClient extends Fake implements supabase.GoTrueClient {
       user: anonUser,
     );
     return supabase.AuthResponse(session: _activeSession, user: anonUser);
+  }
+
+  void setActiveSession(supabase.Session? session) {
+    _activeSession = session;
+  }
+
+  @override
+  Future<supabase.AuthResponse> refreshSession([String? refreshToken]) async {
+    if (_simulateNetworkError) {
+      throw const supabase.AuthException(
+        'Failed host lookup: lgjzjzbbhmiejuovgtol.supabase.co',
+        statusCode: '0',
+      );
+    }
+    if (_activeSession != null) {
+      _activeSession = supabase.Session(
+        accessToken: 'token_refreshed_${_activeSession!.user.id}',
+        tokenType: 'bearer',
+        user: _activeSession!.user,
+      );
+      return supabase.AuthResponse(session: _activeSession, user: _activeSession!.user);
+    }
+    throw const supabase.AuthException('No active session to refresh');
   }
 
   @override
@@ -538,6 +579,66 @@ void main() {
       expect(controller.state.successMessage?.contains('successfully'), isTrue);
 
       controller.dispose();
+    });
+
+    test('TEST 19: App Reopen: Existing session restored automatically without re-login', () async {
+      // 1. User logs in
+      await authRepo.register(
+        name: 'Persistent User',
+        email: 'persist@example.com',
+        password: 'password123',
+        confirmPassword: 'password123',
+      );
+
+      // 2. Simulate app close and reopen: restoreSession() is called on startup
+      final restoredSession = await authRepo.restoreSession();
+      expect(restoredSession, isNotNull);
+      expect(restoredSession!.isValid, isTrue);
+      expect(restoredSession.user.email, 'persist@example.com');
+    });
+
+    test('TEST 20: Expired access token is refreshed automatically on startup without logging user out', () async {
+      final fakeAuth = testClient.auth as FakeSupabaseAuthClient;
+      final user = supabase.User(
+        id: 'sb_user_expired_test',
+        appMetadata: {},
+        userMetadata: {'full_name': 'Expired User'},
+        aud: 'authenticated',
+        createdAt: DateTime.now().toIso8601String(),
+        email: 'expired@example.com',
+      );
+
+      // Session with expired access token
+      final expiredSession = FakeSession(
+        accessToken: 'old_expired_token',
+        user: user,
+        isExpired: true,
+      );
+      fakeAuth.setActiveSession(expiredSession);
+
+      final restoredSession = await authRepo.restoreSession();
+      expect(restoredSession, isNotNull);
+      expect(restoredSession!.isValid, isTrue);
+      expect(restoredSession.token.startsWith('token_refreshed_'), isTrue);
+      expect(restoredSession.user.id, 'sb_user_expired_test');
+    });
+
+    test('TEST 21: Explicit logout ensures app reopen correctly identifies unauthenticated state', () async {
+      // User is logged in
+      await authRepo.register(
+        name: 'Logout Test User',
+        email: 'logout@example.com',
+        password: 'password123',
+        confirmPassword: 'password123',
+      );
+      expect(authRepo.getCurrentSession(), isNotNull);
+
+      // Explicit logout
+      await authRepo.logout();
+
+      // App reopen check: restoreSession() returns null
+      final restoredSession = await authRepo.restoreSession();
+      expect(restoredSession, isNull);
     });
   });
 }

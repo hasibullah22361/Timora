@@ -83,8 +83,10 @@ class ScheduleRepository {
     final index = _activities.indexWhere((a) => a.id == activity.id);
     if (index >= 0) {
       _activities[index] = activity.copyWith(updatedAt: DateTime.now());
-      await _saveToStorage();
+    } else {
+      _activities.add(activity);
     }
+    await _saveToStorage();
   }
 
   Future<void> deleteActivity(String id) async {

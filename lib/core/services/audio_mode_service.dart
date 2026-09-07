@@ -15,7 +15,7 @@ class AudioModeService {
   /// Gets the current Android ringer mode.
   /// Returns [AudioMode.normal] on non-Android platforms.
   Future<AudioMode> getCurrentMode() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return AudioMode.normal;
     }
 

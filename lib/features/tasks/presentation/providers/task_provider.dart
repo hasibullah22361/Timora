@@ -148,7 +148,9 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       _ref.read(widgetUpdateServiceProvider).updateWidgets();
     } catch (_) {}
-    _ref.read(syncServiceProvider).autoSync();
+    try {
+      _ref.read(syncServiceProvider).autoSync();
+    } catch (_) {}
   }
 
   Future<void> createTask(TaskModel task) async {

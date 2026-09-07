@@ -199,7 +199,23 @@ class _HabitsScreenState extends ConsumerState<HabitsScreen> {
                     if (val == 'edit') {
                       _showAddEditHabitSheet(habit);
                     } else if (val == 'delete') {
-                      ref.read(habitNotifierProvider).deleteHabit(habit.id, goalId: habit.goalId);
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Delete Habit?'),
+                          content: Text('Are you sure you want to delete "${habit.title}"?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.pop(ctx);
+                                await ref.read(habitNotifierProvider).deleteHabit(habit.id, goalId: habit.goalId);
+                              },
+                              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
                     }
                   },
                   itemBuilder: (_) => [
@@ -394,7 +410,7 @@ class _AddEditHabitModalState extends ConsumerState<_AddEditHabitModal> {
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final isNew = widget.habitToEdit == null;
@@ -412,12 +428,12 @@ class _AddEditHabitModalState extends ConsumerState<_AddEditHabitModal> {
     );
 
     if (isNew) {
-      ref.read(habitNotifierProvider).createHabit(habit);
+      await ref.read(habitNotifierProvider).createHabit(habit);
     } else {
-      ref.read(habitNotifierProvider).updateHabit(habit);
+      await ref.read(habitNotifierProvider).updateHabit(habit);
     }
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   @override

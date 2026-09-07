@@ -48,7 +48,7 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
     }
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Planner', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,

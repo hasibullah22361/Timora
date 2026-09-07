@@ -202,8 +202,10 @@ class TaskRepository {
     final index = _subtasks.indexWhere((s) => s.id == subtask.id);
     if (index >= 0) {
       _subtasks[index] = subtask.copyWith(updatedAt: DateTime.now());
-      await _saveToStorage();
+    } else {
+      _subtasks.add(subtask);
     }
+    await _saveToStorage();
   }
 
   Future<void> deleteSubtask(String id) async {

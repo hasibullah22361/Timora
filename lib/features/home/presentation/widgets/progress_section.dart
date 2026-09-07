@@ -4,157 +4,243 @@ import '../providers/home_provider.dart';
 import '../../../schedule/data/models/schedule_activity.dart';
 import '../../../tasks/presentation/providers/task_provider.dart';
 import '../../../tasks/data/models/task_model.dart';
-import '../../../profile/presentation/providers/user_profile_provider.dart';
 import '../../../focus/presentation/providers/focus_provider.dart';
 import '../../../focus/data/models/focus_session_model.dart';
+import '../../../analytics/presentation/screens/analytics_screen.dart';
 
 class ProgressSection extends ConsumerWidget {
   const ProgressSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final scheduleAsync = ref.watch(dailyScheduleProvider);
     final todayTasksAsync = ref.watch(todayTasksProvider);
     final focusSessionsAsync = ref.watch(todayFocusSessionsProvider);
-    final profile = ref.watch(userProfileProvider);
+    final timerState = ref.watch(focusTimerProvider);
 
     // 1. Compute Schedule completion
     int totalActivities = 0;
     int completedActivities = 0;
-    double scheduleProgress = 0.0;
     scheduleAsync.whenData((activities) {
       totalActivities = activities.length;
       if (totalActivities > 0) {
         completedActivities = activities.where((a) => a.status == ActivityStatus.completed).length;
-        scheduleProgress = completedActivities / totalActivities;
       }
     });
 
     // 2. Compute Tasks completion (for today)
     int totalTodayTasks = 0;
     int completedTodayTasks = 0;
-    double taskProgress = 0.0;
     todayTasksAsync.whenData((tasks) {
       final activeOrCompleted = tasks.where((t) => !t.isDeleted && t.status != TaskStatus.cancelled).toList();
       totalTodayTasks = activeOrCompleted.length;
       if (totalTodayTasks > 0) {
         completedTodayTasks = activeOrCompleted.where((t) => t.status == TaskStatus.completed).length;
-        taskProgress = completedTodayTasks / totalTodayTasks;
       }
     });
 
-    // 3. Compute Focus Goal completion
-    double focusProgress = 0.0;
+    // 3. Compute Focus Duration (actual logged focus time + current active focus session)
+    int totalFocusSeconds = 0;
     focusSessionsAsync.whenData((sessions) {
-      if (profile.dailyGoalHours > 0) {
-        final totalSeconds = sessions
-            .where((s) => s.status == FocusSessionStatus.completed)
-            .fold<int>(0, (sum, s) => sum + s.actualDurationSeconds);
-        final hoursLogged = totalSeconds / 3600.0;
-        focusProgress = (hoursLogged / profile.dailyGoalHours).clamp(0.0, 1.0);
-      }
+      totalFocusSeconds = sessions
+          .where((s) => s.status == FocusSessionStatus.completed)
+          .fold<int>(0, (sum, s) => sum + s.actualDurationSeconds);
     });
 
-    // 4. Compute Overall Daily Productivity based on actual today items
-    double overallProgress = 0.0;
-    final totalActionableItems = totalActivities + totalTodayTasks;
-    final totalCompletedItems = completedActivities + completedTodayTasks;
-
-    if (totalActionableItems > 0) {
-      overallProgress = (totalCompletedItems / totalActionableItems).clamp(0.0, 1.0);
-    } else if (profile.dailyGoalHours > 0) {
-      overallProgress = focusProgress;
-    } else {
-      overallProgress = 0.0;
+    if (timerState.activeSession != null &&
+        (timerState.activeSession!.status == FocusSessionStatus.running ||
+            timerState.activeSession!.status == FocusSessionStatus.paused ||
+            timerState.activeSession!.status == FocusSessionStatus.breakTime)) {
+      totalFocusSeconds += timerState.elapsedSeconds;
     }
+
+    final focusHours = totalFocusSeconds ~/ 3600;
+    final focusMins = (totalFocusSeconds % 3600) ~/ 60;
+    final focusStr = totalFocusSeconds > 0
+        ? '${focusHours > 0 ? '${focusHours}h ' : ''}${focusMins}m'
+        : '0m';
+
+    final tasksDoneDisplay = '$completedTodayTasks';
+
+    // 4. Compute Overall Daily Productivity
+    final totalActionable = totalActivities + totalTodayTasks;
+    final totalCompleted = completedActivities + completedTodayTasks;
+    final productivityPct = totalActionable > 0
+        ? ((totalCompleted / totalActionable) * 100).round()
+        : 0;
+
+    // 5. Focus Score: 2 pts per focus min + 20 pts per completed task
+    final computedScore = ((totalFocusSeconds / 60) * 2 + completedTodayTasks * 20).round();
+    final focusScoreDisplay = '$computedScore';
+
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Header: Today's Progress + See Details ->
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               "Today's Progress",
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
               ),
-              child: Text(
-                'Goal: ${profile.dailyGoalHours.toStringAsFixed(0)}h',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
+            ),
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AnalyticsScreen()),
+                );
+              },
+              child: Row(
+                children: [
+                  Text(
+                    'See Details',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    size: 14,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Segmented Card
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0C1322) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark ? const Color(0xFF172033) : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: Row(
+            children: [
+              // Metric 1: Focused
+              Expanded(
+                child: _buildMetric(
+                  context: context,
+                  icon: Icons.access_time_rounded,
+                  iconColor: const Color(0xFF38BDF8),
+                  value: focusStr,
+                  label: 'Focused',
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildProgressItem(context, 'Schedule', scheduleProgress, const Color(0xFF2563EB)),
-            _buildProgressItem(context, 'Tasks', taskProgress, const Color(0xFF10B981)),
-            _buildProgressItem(context, 'Focus Goal', focusProgress, const Color(0xFFF59E0B)),
-            _buildProgressItem(context, 'Overall', overallProgress, const Color(0xFF8B5CF6)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProgressItem(BuildContext context, String label, double progress, Color color) {
-    final theme = Theme.of(context);
-    final clamped = progress.clamp(0.0, 1.0);
-    final percentageInt = (clamped * 100).round();
-
-    return Column(
-      children: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              height: 58,
-              width: 58,
-              child: CircularProgressIndicator(
-                value: clamped,
-                backgroundColor: color.withValues(alpha: 0.15),
-                color: color,
-                strokeWidth: 5.5,
-                strokeCap: StrokeCap.round,
+              _buildDivider(isDark),
+              // Metric 2: Tasks Done
+              Expanded(
+                child: _buildMetric(
+                  context: context,
+                  icon: Icons.check_circle_outline_rounded,
+                  iconColor: const Color(0xFF22C55E),
+                  value: tasksDoneDisplay,
+                  label: 'Tasks Done',
+                ),
               ),
-            ),
-            Text(
-              '$percentageInt%',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
+              _buildDivider(isDark),
+              // Metric 3: Productivity
+              Expanded(
+                child: _buildMetric(
+                  context: context,
+                  icon: Icons.gps_fixed_rounded,
+                  iconColor: const Color(0xFFF59E0B),
+                  value: '$productivityPct%',
+                  label: 'Productivity',
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          width: 72,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+              _buildDivider(isDark),
+              // Metric 4: Focus Score
+              Expanded(
+                child: _buildMetric(
+                  context: context,
+                  icon: Icons.local_fire_department_rounded,
+                  iconColor: const Color(0xFF38BDF8),
+                  value: focusScoreDisplay,
+                  label: 'Focus Score',
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
+
+  Widget _buildDivider(bool isDark) {
+    return Container(
+      width: 1,
+      height: 44,
+      color: isDark ? const Color(0xFF1A2438) : const Color(0xFFF1F5F9),
+    );
+  }
+
+  Widget _buildMetric({
+    required BuildContext context,
+    required IconData icon,
+    required Color iconColor,
+    required String value,
+    required String label,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: iconColor, size: 22),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            fontSize: 15.5,
+            fontWeight: FontWeight.bold,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: TextStyle(
+            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            fontSize: 11,
+            fontWeight: FontWeight.w400,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
 }
+
+

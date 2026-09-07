@@ -185,20 +185,21 @@ class AppTheme {
         clipBehavior: Clip.antiAliasWithSaveLayer,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppTokens.surfaceLight,
-        elevation: 3,
-        indicatorColor: AppTokens.primaryBlue.withValues(alpha: 0.12),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        indicatorColor: const Color(0xFFEFF6FF),
+        surfaceTintColor: Colors.transparent,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTokens.primaryBlue);
+            return const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTokens.primaryBlue);
           }
-          return const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppTokens.textSecondaryLight);
+          return const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTokens.textSecondaryLight);
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppTokens.primaryBlue, size: 24);
+            return const IconThemeData(color: AppTokens.primaryBlue, size: 22);
           }
-          return const IconThemeData(color: AppTokens.textSecondaryLight, size: 24);
+          return const IconThemeData(color: AppTokens.textSecondaryLight, size: 22);
         }),
       ),
     );
@@ -378,20 +379,21 @@ class AppTheme {
         clipBehavior: Clip.antiAliasWithSaveLayer,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppTokens.surfaceDark,
-        elevation: 3,
-        indicatorColor: AppTokens.primaryBlueLight.withValues(alpha: 0.2),
+        backgroundColor: AppTokens.bgDark,
+        elevation: 0,
+        indicatorColor: const Color(0xFF14244B),
+        surfaceTintColor: Colors.transparent,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTokens.primaryBlueLight);
+            return const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF38BDF8));
           }
-          return const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppTokens.textSecondaryDark);
+          return const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B));
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppTokens.primaryBlueLight, size: 24);
+            return const IconThemeData(color: Color(0xFF38BDF8), size: 22);
           }
-          return const IconThemeData(color: AppTokens.textSecondaryDark, size: 24);
+          return const IconThemeData(color: Color(0xFF64748B), size: 22);
         }),
       ),
     );

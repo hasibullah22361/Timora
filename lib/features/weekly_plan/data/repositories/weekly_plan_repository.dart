@@ -89,5 +89,17 @@ class WeeklyPlanRepository {
     }
     return null;
   }
+
+  Future<List<WeeklyPlanModel>> getAllPlans() async {
+    return List.unmodifiable(_plans);
+  }
+
+  Future<WeeklyPlanModel?> getPlanById(String id) async {
+    try {
+      return _plans.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
 }
 

@@ -230,9 +230,9 @@ class _AddEditRoutineBlockSheetState extends ConsumerState<AddEditRoutineBlockSh
                     if (isEditing)
                       Center(
                         child: TextButton.icon(
-                          onPressed: () {
-                            ref.read(routineNotifierProvider).deleteRoutineBlock(widget.blockToEdit!.id, widget.routineId);
-                            Navigator.pop(context);
+                          onPressed: () async {
+                            await ref.read(routineNotifierProvider).deleteRoutineBlock(widget.blockToEdit!.id, widget.routineId);
+                            if (context.mounted) Navigator.pop(context);
                           },
                           icon: const Icon(Icons.delete, color: Colors.red),
                           label: const Text('Delete Activity', style: TextStyle(color: Colors.red)),

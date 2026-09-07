@@ -6,6 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:timora/features/analytics/data/models/analytics_models.dart';
 import 'package:timora/features/analytics/presentation/providers/analytics_provider.dart';
 import 'package:timora/features/ai_assistant/presentation/widgets/ai_coach_card.dart';
+import '../widgets/productivity_heatmap_widget.dart';
+import '../widgets/consistency_score_card.dart';
+import 'reports_screen.dart';
 
 class AnalyticsScreen extends ConsumerWidget {
   const AnalyticsScreen({super.key});
@@ -22,6 +25,19 @@ class AnalyticsScreen extends ConsumerWidget {
             style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF3B82F6),
+            ),
+            icon: const Icon(Icons.assessment_outlined, size: 18),
+            label: const Text('Reports', style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsScreen()));
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: CustomScrollView(
         slivers: [
@@ -30,6 +46,20 @@ class AnalyticsScreen extends ConsumerWidget {
           const SliverToBoxAdapter(child: _ProductivityScoreHeroCard()),
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
           const SliverToBoxAdapter(child: AICoachCard()),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: ConsistencyScoreCard(),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: ProductivityHeatmapWidget(),
+            ),
+          ),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           const SliverToBoxAdapter(child: _SummaryCards()),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),

@@ -108,40 +108,44 @@ class Routine {
   }
 
   factory Routine.fromJson(Map<String, dynamic> json) {
-    final createdAt = json['createdAt'] != null
-        ? DateTime.parse(json['createdAt'] as String)
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final createdAt = createdRaw != null
+        ? (DateTime.tryParse(createdRaw.toString()) ?? DateTime.now())
         : DateTime.now();
+
+    final daysRaw = json['daysOfWeek'] ?? json['days_of_week'];
+    List<int> parsedDays = [1, 2, 3, 4, 5, 6, 7];
+    if (daysRaw is List) {
+      parsedDays = daysRaw.map((e) => int.tryParse(e.toString()) ?? 1).toList();
+    }
+
+    final startRaw = json['startDate'] ?? json['start_date'];
+    final endRaw = json['endDate'] ?? json['end_date'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
 
     return Routine(
       id: json['id'] as String,
-      name: json['name'] as String,
+      name: json['name'] as String? ?? 'Routine',
       description: json['description'] as String? ?? '',
       icon: json['icon'] as String? ?? '📌',
       color: json['color'] != null
-          ? Color(json['color'] as int)
+          ? Color((json['color'] as num).toInt())
           : Colors.blue,
       enabled: json['enabled'] as bool? ?? true,
-      daysOfWeek: (json['daysOfWeek'] as List<dynamic>?)
-              ?.map((e) => e as int)
-              .toList() ??
-          [1, 2, 3, 4, 5, 6, 7],
-      startDate: json['startDate'] != null
-          ? DateTime.parse(json['startDate'] as String)
+      daysOfWeek: parsedDays,
+      startDate: startRaw != null
+          ? (DateTime.tryParse(startRaw.toString()) ?? createdAt)
           : createdAt,
-      endDate: json['endDate'] != null
-          ? DateTime.parse(json['endDate'] as String)
-          : null,
+      endDate: endRaw != null ? DateTime.tryParse(endRaw.toString()) : null,
       frequency: json['frequency'] != null
           ? RoutineFrequency.values.firstWhere(
               (f) => f.name == json['frequency'],
               orElse: () => RoutineFrequency.weekly,
             )
           : RoutineFrequency.weekly,
-      monthlyDay: json['monthlyDay'] as int?,
+      monthlyDay: (json['monthlyDay'] ?? json['monthly_day']) as int?,
       createdAt: createdAt,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : null,
+      updatedAt: updatedRaw != null ? DateTime.tryParse(updatedRaw.toString()) : null,
     );
   }
 }

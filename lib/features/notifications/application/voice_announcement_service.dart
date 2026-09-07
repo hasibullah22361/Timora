@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:timora/core/services/audio_mode_service.dart';
 import 'package:timora/features/settings/data/repositories/notification_settings_repository.dart';
 import 'package:timora/features/schedule/data/models/schedule_activity.dart';
+import 'notification_message_generator.dart';
 
 final voiceAnnouncementServiceProvider = Provider<VoiceAnnouncementService>((ref) {
   try {
@@ -40,7 +41,7 @@ class VoiceAnnouncementService {
   Future<void> _initTts() async {
     if (_isInitialized) return;
     try {
-      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      if (!kIsWeb) {
         await _flutterTts.setSpeechRate(0.5);
         await _flutterTts.setVolume(1.0);
         await _flutterTts.setPitch(1.0);
@@ -81,6 +82,127 @@ class VoiceAnnouncementService {
       debugPrint('[TimoraTTS] Initialization error: $e');
     }
   }
+
+  /// Explicitly switches voice between male and female safely stopping any active playback.
+  Future<void> switchVoice({required bool isMale, required double speed}) async {
+    try {
+      await stop();
+      if (_currentSpeechCompleter != null && !_currentSpeechCompleter!.isCompleted) {
+        _currentSpeechCompleter!.complete();
+      }
+      await _initTts();
+      await _configureVoice(isMale: isMale, speed: speed);
+      debugPrint('[TimoraTTS] Voice switched safely: male=$isMale, speed=${speed}x');
+    } catch (e) {
+      debugPrint('[TimoraTTS] Error switching voice: $e');
+    }
+  }
+
+  /// Configures human-like natural adult male/female voice, pitch, and pacing.
+  Future<void> _configureVoice({required bool isMale, required double speed}) async {
+    if (!kIsWeb) {
+      // 1. Always stop previous utterance before reconfiguring parameters
+      try {
+        await _flutterTts.stop();
+      } catch (_) {}
+
+      try {
+        final List<dynamic>? voices = await _flutterTts.getVoices;
+        if (voices != null && voices.isNotEmpty) {
+          Map<String, String>? selectedVoice;
+
+          // First pass: match target gender keywords
+          for (final v in voices) {
+            if (v is Map) {
+              final name = (v['name'] ?? '').toString().toLowerCase();
+              final locale = (v['locale'] ?? '').toString().toLowerCase();
+              if (locale.startsWith('en')) {
+                bool matches = false;
+                if (isMale) {
+                  final isTarget = name.contains('male') ||
+                      name.contains('#m') ||
+                      name.contains('iol') ||
+                      name.contains('-m-');
+                  final notFemale = !name.contains('female');
+                  matches = isTarget && notFemale;
+                } else {
+                  matches = name.contains('female') ||
+                      name.contains('#f') ||
+                      name.contains('tpf') ||
+                      name.contains('-f-');
+                }
+
+                if (matches) {
+                  selectedVoice = {
+                    'name': v['name'].toString(),
+                    'locale': v['locale'].toString(),
+                  };
+                  break;
+                }
+              }
+            }
+          }
+
+          // Fallback pass: any English voice if target gender not found
+          if (selectedVoice == null) {
+            for (final v in voices) {
+              if (v is Map) {
+                final locale = (v['locale'] ?? '').toString().toLowerCase();
+                if (locale.startsWith('en')) {
+                  selectedVoice = {
+                    'name': v['name'].toString(),
+                    'locale': v['locale'].toString(),
+                  };
+                  break;
+                }
+              }
+            }
+          }
+
+          if (selectedVoice != null) {
+            try {
+              await _flutterTts.setVoice(selectedVoice);
+              debugPrint('[TimoraTTS] Applied voice: ${selectedVoice['name']} (male=$isMale)');
+            } catch (ve) {
+              debugPrint('[TimoraTTS] setVoice fallback notice: $ve');
+              try {
+                await _flutterTts.setLanguage('en-US');
+              } catch (_) {}
+            }
+          } else {
+            // Safe fallback when no voice matched: ensure default en-US language is configured
+            try {
+              await _flutterTts.setLanguage('en-US');
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        debugPrint('[TimoraTTS] Voice selection notice: $e');
+      }
+
+      // Adult human pitch:
+      // Male: 0.90 (natural, warm adult resonance)
+      // Female: 1.05 (natural, clear, friendly adult tone)
+      try {
+        final double pitch = isMale ? 0.90 : 1.05;
+        await _flutterTts.setPitch(pitch);
+      } catch (e) {
+        debugPrint('[TimoraTTS] Pitch set notice: $e');
+      }
+
+      // Natural human pacing & speech rate:
+      // FlutterTts rate on Android: 0.5 corresponds to standard normal speech.
+      // Pacing at 0.46 for male and 0.48 for female provides natural pauses without mechanical rush.
+      try {
+        final double baseRate = isMale ? 0.46 : 0.48;
+        final double rate = (speed * baseRate).clamp(0.05, 1.0);
+        await _flutterTts.setSpeechRate(rate);
+      } catch (e) {
+        debugPrint('[TimoraTTS] SpeechRate set notice: $e');
+      }
+    }
+  }
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // TEXT SANITIZATION
@@ -144,12 +266,6 @@ class VoiceAnnouncementService {
     return buildAnnouncementPhrase(name);
   }
 
-  /// Task start / reminder phrase.
-  String _phraseTaskStart(String name) {
-    final clean = _cleanText(name);
-    if (clean.isEmpty) return 'Your task starts now.';
-    return 'Your $clean task starts now.';
-  }
 
   /// Task completed phrase.
   String _phraseTaskCompleted(String name) {
@@ -208,14 +324,13 @@ class VoiceAnnouncementService {
 
     try {
       await _initTts();
-      // Apply speaking speed setting (Phase 6)
+      await stop();
+      final isMale = _settingsRepo?.isMaleVoice ?? false;
       final speed = _settingsRepo?.speakingSpeed ?? 1.0;
-      final rate = (speed * 0.5).clamp(0.05, 1.0);
-      await _flutterTts.setSpeechRate(rate);
+      await _configureVoice(isMale: isMale, speed: speed);
 
-      await _flutterTts.stop();
       _currentSpeechCompleter = Completer<void>();
-      debugPrint('[TimoraTTS] Speaking (speed: ${speed}x, rate: $rate): "$phrase"');
+      debugPrint('[TimoraTTS] Speaking (male: $isMale, speed: ${speed}x): "$phrase"');
       await _flutterTts.speak(phrase);
       return true;
     } catch (e) {
@@ -234,7 +349,10 @@ class VoiceAnnouncementService {
     required String taskName,
     DateTime? scheduledTime,
   }) async {
-    final phrase = _phraseTaskStart(taskName);
+    final phrase = NotificationMessageGenerator.generateTaskStart(
+      taskName: taskName,
+      scheduledTime: scheduledTime,
+    ).spokenMessage;
     final timeStamp = scheduledTime != null
         ? '${scheduledTime.hour.toString().padLeft(2, '0')}${scheduledTime.minute.toString().padLeft(2, '0')}'
         : DateTime.now().millisecondsSinceEpoch.toString();
@@ -249,19 +367,59 @@ class VoiceAnnouncementService {
     return _speak(phrase, dedupeKey: 'task_done_$taskId');
   }
 
+  /// Focus session starts.
+  Future<bool> speakFocusSessionStart({
+    required int durationMinutes,
+    String? sessionTitle,
+  }) async {
+    final phrase = NotificationMessageGenerator.generateFocusSessionStart(
+      durationMinutes: durationMinutes,
+      sessionTitle: sessionTitle,
+    ).spokenMessage;
+    debugPrint('[TimoraTTS] Event type: focus_start | $durationMinutes min');
+    return _speak(phrase, dedupeKey: 'focus_start_${DateTime.now().millisecondsSinceEpoch}');
+  }
+
+  /// Task missed / recovery.
+  Future<bool> speakTaskMissed({
+    required String taskId,
+    required String taskName,
+  }) async {
+    final phrase = NotificationMessageGenerator.generateTaskMissed(
+      taskName: taskName,
+    ).spokenMessage;
+    debugPrint('[TimoraTTS] Event type: task_missed | Task: $taskName');
+    return _speak(phrase, dedupeKey: 'task_missed_$taskId');
+  }
+
+  /// Productivity report ready (daily, weekly, monthly).
+  Future<bool> speakReportReady({
+    required String reportType,
+  }) async {
+    final phrase = NotificationMessageGenerator.generateReportReady(
+      reportType: reportType,
+    ).spokenMessage;
+    debugPrint('[TimoraTTS] Event type: report_ready | Type: $reportType');
+    return _speak(phrase, dedupeKey: 'report_ready_${reportType}_${DateTime.now().day}');
+  }
+
   /// Schedule/activity starts. Dynamic from activity name.
   Future<bool> speakScheduleStart({
     required String activityId,
     required String activityName,
     DateTime? scheduledTime,
   }) async {
-    final phrase = _phraseActivityStart(activityName);
+    final phrase = NotificationMessageGenerator.generateStartMessage(
+      activityName: activityName,
+      startTime: scheduledTime,
+    ).spokenMessage;
     final timeStamp = scheduledTime != null
         ? '${scheduledTime.hour.toString().padLeft(2, '0')}${scheduledTime.minute.toString().padLeft(2, '0')}'
         : DateTime.now().millisecondsSinceEpoch.toString();
     debugPrint('[TimoraTTS] Event type: schedule_start | Activity: $activityName');
     return _speak(phrase, dedupeKey: 'schedule_start_${activityId}_$timeStamp');
   }
+
 
   /// Schedule/activity completed. Dynamic from activity name.
   Future<bool> speakScheduleCompleted({required String activityId, required String activityName}) async {
@@ -432,20 +590,23 @@ class VoiceAnnouncementService {
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Manually speak a sample phrase (Test Voice button). Always fires regardless of setting.
-  Future<void> speakSampleAnnouncement(String activityName) async {
-    final phrase = _phraseActivityStart(activityName);
+  Future<void> speakSampleAnnouncement([String? activityName]) async {
+    final phrase = (activityName != null && activityName.isNotEmpty && activityName != 'Gym')
+        ? 'Hey, your $activityName session starts at 9 AM.'
+        : 'Hey, your AI and Data Science study session starts at 9 AM.';
     try {
       await _initTts();
+      await stop();
+      final isMale = _settingsRepo?.isMaleVoice ?? false;
       final speed = _settingsRepo?.speakingSpeed ?? 1.0;
-      final rate = (speed * 0.5).clamp(0.05, 1.0);
-      await _flutterTts.setSpeechRate(rate);
-      await _flutterTts.stop();
-      debugPrint('[TimoraTTS] Test Voice (speed: ${speed}x, rate: $rate): "$phrase"');
+      await _configureVoice(isMale: isMale, speed: speed);
+      debugPrint('[TimoraTTS] Test Voice (male: $isMale, speed: ${speed}x): "$phrase"');
       await _flutterTts.speak(phrase);
     } catch (e) {
       debugPrint('[TimoraTTS] Test Voice error: $e');
     }
   }
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // CONTROL

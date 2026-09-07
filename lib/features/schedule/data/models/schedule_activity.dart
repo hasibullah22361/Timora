@@ -102,33 +102,44 @@ class ScheduleActivity {
   }
 
   factory ScheduleActivity.fromJson(Map<String, dynamic> json) {
+    final now = DateTime.now();
+
+    final dateRaw = json['date'] ?? json['activity_date'];
+    final parsedDate = dateRaw != null ? (DateTime.tryParse(dateRaw.toString()) ?? now) : now;
+
+    final startRaw = json['startTime'] ?? json['start_time'];
+    final parsedStart = startRaw != null ? (DateTime.tryParse(startRaw.toString()) ?? now) : now;
+
+    final endRaw = json['endTime'] ?? json['end_time'];
+    final parsedEnd = endRaw != null
+        ? (DateTime.tryParse(endRaw.toString()) ?? parsedStart.add(const Duration(minutes: 30)))
+        : parsedStart.add(const Duration(minutes: 30));
+
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final completedRaw = json['completedAt'] ?? json['completed_at'];
+
     return ScheduleActivity(
       id: json['id'] as String,
-      title: json['title'] as String,
+      title: json['title'] as String? ?? 'Activity',
       description: json['description'] as String? ?? '',
-      date: DateTime.parse(json['date'] as String),
-      startTime: DateTime.parse(json['startTime'] as String),
-      endTime: DateTime.parse(json['endTime'] as String),
+      date: parsedDate,
+      startTime: parsedStart,
+      endTime: parsedEnd,
       category: json['category'] as String? ?? 'Routine',
       icon: json['icon'] as String? ?? '📌',
-      color: json['color'] != null ? Color(json['color'] as int) : Colors.blue,
+      color: json['color'] != null ? Color((json['color'] as num).toInt()) : Colors.blue,
       status: ActivityStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => ActivityStatus.upcoming,
       ),
       notes: json['notes'] as String? ?? '',
-      reminderEnabled: json['reminderEnabled'] as bool? ?? true,
-      routineBlockId: json['routineBlockId'] as String?,
-      isOverridden: json['isOverridden'] as bool? ?? false,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : null,
-      completedAt: json['completedAt'] != null
-          ? DateTime.parse(json['completedAt'] as String)
-          : null,
+      reminderEnabled: (json['reminderEnabled'] ?? json['reminder_enabled']) as bool? ?? true,
+      routineBlockId: (json['routineBlockId'] ?? json['routine_block_id']) as String?,
+      isOverridden: (json['isOverridden'] ?? json['is_overridden']) as bool? ?? false,
+      createdAt: createdRaw != null ? (DateTime.tryParse(createdRaw.toString()) ?? now) : now,
+      updatedAt: updatedRaw != null ? DateTime.tryParse(updatedRaw.toString()) : null,
+      completedAt: completedRaw != null ? DateTime.tryParse(completedRaw.toString()) : null,
     );
   }
 }

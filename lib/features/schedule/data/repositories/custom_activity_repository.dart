@@ -21,7 +21,11 @@ final recentActivitiesProvider = Provider<List<ActivityDefinition>>((ref) {
   final all = ref.watch(allActivitiesProvider);
   final repo = ref.watch(customActivityRepositoryProvider);
   final recentIds = repo.getRecentIds();
-  return recentIds.map((id) => all.firstWhere((a) => a.id == id, orElse: () => all.first)).toList();
+  if (all.isEmpty) return [];
+  return recentIds
+      .map((id) => all.where((a) => a.id == id).firstOrNull)
+      .whereType<ActivityDefinition>()
+      .toList();
 });
 
 class CustomActivityRepository {

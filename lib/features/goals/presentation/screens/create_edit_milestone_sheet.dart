@@ -72,9 +72,9 @@ class _CreateEditMilestoneSheetState extends ConsumerState<CreateEditMilestoneSh
     );
 
     if (isNew) {
-      ref.read(goalNotifierProvider).createMilestone(milestone);
+      await ref.read(goalNotifierProvider).createMilestone(milestone);
     } else {
-      ref.read(goalNotifierProvider).updateMilestone(milestone);
+      await ref.read(goalNotifierProvider).updateMilestone(milestone);
     }
 
     if (mounted) {

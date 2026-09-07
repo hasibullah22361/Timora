@@ -90,7 +90,12 @@ class TimoraSpeakingReceiver : BroadcastReceiver() {
         eventsPrefs.edit().remove("evt_$alarmIdStr").apply()
         legacyPrefs.edit().remove("timora_alarm_$alarmIdStr").apply()
 
-        Log.d(TAG, "[TimoraAlarm] Event: ID=$alarmIdStr type=$eventType title=\"$title\" speakEnabled=$speakEnabled")
+        val voiceGender = flutterPrefs.getString("flutter.notificationVoiceGender", null)
+            ?: eventsPrefs.getString("voiceGender", "female") ?: "female"
+        val speed = flutterPrefs.getFloat("flutter.speakingSpeed", 1.0f).takeIf { it > 0 }
+            ?: eventsPrefs.getFloat("speakingSpeed", 1.0f)
+
+        Log.d(TAG, "[TimoraAlarm] Event: ID=$alarmIdStr type=$eventType title=\"$title\" speakEnabled=$speakEnabled voiceGender=$voiceGender speed=$speed")
 
         // Start Foreground Speaking Service
         val serviceIntent = Intent(context, TimoraSpeakingService::class.java).apply {
@@ -100,6 +105,8 @@ class TimoraSpeakingReceiver : BroadcastReceiver() {
             putExtra(TimoraSpeakingService.EXTRA_SPEAK_TEXT, spokenMessage)
             putExtra(TimoraSpeakingService.EXTRA_EVENT_TYPE, eventType)
             putExtra(TimoraSpeakingService.EXTRA_SPEAK_ENABLED, speakEnabled)
+            putExtra(TimoraSpeakingService.EXTRA_VOICE_GENDER, voiceGender)
+            putExtra(TimoraSpeakingService.EXTRA_SPEAK_SPEED, speed)
         }
 
         try {

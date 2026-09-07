@@ -57,10 +57,10 @@ class AppTokens {
   static const Color textMutedLight = Color(0xFF94A3B8); // Slate-400
 
   // Neutral Scales (Dark)
-  static const Color bgDark = Color(0xFF0B0F19); // Ultra-deep Slate
-  static const Color surfaceDark = Color(0xFF151C2C); // Deep Surface
-  static const Color cardDark = Color(0xFF1B2438); // Card Surface
-  static const Color borderDark = Color(0xFF26334D); // Border Highlight
+  static const Color bgDark = Color(0xFF070B14); // Ultra-deep dark navy matching screenshot
+  static const Color surfaceDark = Color(0xFF0C1322); // Deep Surface
+  static const Color cardDark = Color(0xFF0E1626); // Card Surface
+  static const Color borderDark = Color(0xFF1B273F); // Border Highlight
   static const Color textPrimaryDark = Color(0xFFF8FAFC); // Slate-50
   static const Color textSecondaryDark = Color(0xFF94A3B8); // Slate-400
   static const Color textMutedDark = Color(0xFF64748B); // Slate-500
@@ -93,4 +93,38 @@ class AppTokens {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+
+  // Primary Gradient
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  // Hero Card Icon Gradient
+  static const LinearGradient heroGradient = LinearGradient(
+    colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Streak Gradients
+  static const LinearGradient streakGradientDark = LinearGradient(
+    colors: [Color(0xFF221142), Color(0xFF140D2C)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient streakGradientLight = LinearGradient(
+    colors: [Color(0xFFFAF5FF), Color(0xFFF3E8FF)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const Color streakBorderDark = Color(0xFF3B1D73);
+  static const Color streakBorderLight = Color(0xFFE9D5FF);
 }
+
+/// Alias for AppTokens providing convenient color references across presentation screens.
+typedef AppColors = AppTokens;
+

@@ -13,7 +13,7 @@ class WidgetNavigationService {
 
   /// Initializes the widget action listener and checks for initial launch actions.
   static void initialize() {
-    if (_initialized || (!kIsWeb && !Platform.isAndroid)) return;
+    if (_initialized || kIsWeb || !Platform.isAndroid) return;
     _initialized = true;
 
     _channel.setMethodCallHandler((call) async {

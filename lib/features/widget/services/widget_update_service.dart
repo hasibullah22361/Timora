@@ -33,7 +33,7 @@ class WidgetUpdateService {
   /// payload, and pushes it to native Android widgets.
   Future<void> updateWidgets() async {
     // Only Android supports native home screen AppWidgets
-    if (!kIsWeb && !Platform.isAndroid) return;
+    if (kIsWeb || !Platform.isAndroid) return;
 
     try {
       final now = DateTime.now();

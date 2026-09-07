@@ -108,7 +108,7 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final isNew = widget.taskToEdit == null;
@@ -151,12 +151,12 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
     );
 
     if (isNew) {
-      ref.read(taskNotifierProvider).createTask(task);
+      await ref.read(taskNotifierProvider).createTask(task);
     } else {
-      ref.read(taskNotifierProvider).updateTask(task);
+      await ref.read(taskNotifierProvider).updateTask(task);
     }
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   @override
@@ -166,13 +166,16 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
     final activeProjects = ref.watch(activeProjectsProvider).valueOrNull ?? [];
     final activeGoals = ref.watch(activeGoalsProvider).valueOrNull ?? [];
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -397,7 +400,9 @@ class _CreateEditTaskSheetState extends ConsumerState<CreateEditTaskSheet> {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildMilestoneDropdown(String goalId) {

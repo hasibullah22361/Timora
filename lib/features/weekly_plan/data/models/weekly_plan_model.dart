@@ -56,19 +56,27 @@ class WeeklyPlanModel {
   }
 
   factory WeeklyPlanModel.fromJson(Map<String, dynamic> json) {
+    final now = DateTime.now();
+    final startRaw = json['weekStartDate'] ?? json['week_start_date'];
+    final endRaw = json['weekEndDate'] ?? json['week_end_date'];
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final planSec = (json['plannedDurationSeconds'] ?? json['planned_duration_seconds']) as int? ?? 0;
+    final focusSec = (json['targetFocusDurationSeconds'] ?? json['target_focus_duration_seconds']) as int? ?? 0;
+
     return WeeklyPlanModel(
       id: json['id'] as String,
-      weekStartDate: DateTime.parse(json['weekStartDate'] as String),
-      weekEndDate: DateTime.parse(json['weekEndDate'] as String),
+      weekStartDate: startRaw != null ? (DateTime.tryParse(startRaw.toString()) ?? now) : now,
+      weekEndDate: endRaw != null ? (DateTime.tryParse(endRaw.toString()) ?? now.add(const Duration(days: 7))) : now.add(const Duration(days: 7)),
       status: json['status'] as String? ?? 'draft',
       notes: json['notes'] as String? ?? '',
-      plannedDurationSeconds: json['plannedDurationSeconds'] as int? ?? 0,
-      targetFocusDurationSeconds: json['targetFocusDurationSeconds'] as int? ?? 0,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      plannedDurationSeconds: planSec,
+      targetFocusDurationSeconds: focusSec,
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? now)
+          : now,
+      updatedAt: updatedRaw != null
+          ? DateTime.tryParse(updatedRaw.toString())
           : null,
     );
   }

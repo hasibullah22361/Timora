@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'package:timora/core/theme/app_colors.dart';
 import 'package:timora/features/routine/data/models/routine_template.dart';
 import '../providers/routine_provider.dart';
 import 'routine_details_screen.dart';
@@ -49,10 +50,11 @@ class RoutinesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final routinesAsync = ref.watch(routinesProvider);
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Routines', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
@@ -77,12 +79,14 @@ class RoutinesScreen extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final routine = routines[index];
                 return Card(
+                  elevation: 0,
+                  color: isDark ? AppColors.cardDark : AppColors.cardLight,
                   margin: const EdgeInsets.only(bottom: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                     side: BorderSide(
-                      color: routine.enabled ? routine.color : Colors.grey.withValues(alpha: 0.5),
-                      width: 2,
+                      color: routine.enabled ? routine.color : (isDark ? AppColors.borderDark : AppColors.borderLight),
+                      width: routine.enabled ? 1.5 : 1.0,
                     ),
                   ),
                   child: InkWell(
@@ -154,6 +158,7 @@ class RoutinesScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'routines_fab',
         onPressed: () {
           showModalBottomSheet(
             context: context,
@@ -170,47 +175,70 @@ class RoutinesScreen extends ConsumerWidget {
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.repeat_rounded, size: 72, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
-            const SizedBox(height: 16),
-            Text('Build Your Ideal Routine', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              'Structure your days with powerful habits and time blocks.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _showTemplatesModal(context, ref),
-              icon: const Icon(Icons.dashboard_customize_outlined),
-              label: const Text('Explore Templates'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.cardDark : AppColors.cardLight,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+            boxShadow: [
+              if (!isDark)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.repeat_rounded, size: 36, color: theme.colorScheme.primary),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (context) => const AddEditRoutineSheet(),
-                );
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Create Custom Routine'),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text('Build Your Ideal Routine', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                'Structure your days with powerful habits and time blocks.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.65)),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _showTemplatesModal(context, ref),
+                icon: const Icon(Icons.dashboard_customize_outlined, size: 18),
+                label: const Text('Explore Templates'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => const AddEditRoutineSheet(),
+                  );
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Create Custom Routine'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -225,12 +253,13 @@ class _RoutineTemplatesSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final templates = RoutineTemplate.predefinedTemplates;
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(

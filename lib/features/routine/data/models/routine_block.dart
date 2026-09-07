@@ -77,23 +77,26 @@ class RoutineBlock {
   }
 
   factory RoutineBlock.fromJson(Map<String, dynamic> json) {
+    final rId = (json['routineId'] ?? json['routine_id']) as String? ?? '';
+    final sHour = (json['startHour'] ?? json['start_hour']) as int? ?? 0;
+    final sMinute = (json['startMinute'] ?? json['start_minute']) as int? ?? 0;
+    final eHour = (json['endHour'] ?? json['end_hour']) as int? ?? 0;
+    final eMinute = (json['endMinute'] ?? json['end_minute']) as int? ?? 0;
+    final sortOrder = (json['order'] ?? json['sort_order']) as int? ?? 0;
+
     return RoutineBlock(
       id: json['id'] as String,
-      routineId: json['routineId'] as String,
-      title: json['title'] as String,
+      routineId: rId,
+      title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      startTime: TimeOfDay(
-        hour: json['startHour'] as int? ?? 0,
-        minute: json['startMinute'] as int? ?? 0,
-      ),
-      endTime: TimeOfDay(
-        hour: json['endHour'] as int? ?? 0,
-        minute: json['endMinute'] as int? ?? 0,
-      ),
+      startTime: TimeOfDay(hour: sHour, minute: sMinute),
+      endTime: TimeOfDay(hour: eHour, minute: eMinute),
       category: json['category'] as String? ?? 'Routine',
       icon: json['icon'] as String? ?? '📌',
-      color: json['color'] != null ? Color(json['color'] as int) : Colors.blue,
-      order: json['order'] as int? ?? 0,
+      color: json['color'] != null
+          ? Color((json['color'] as num).toInt())
+          : Colors.blue,
+      order: sortOrder,
       enabled: json['enabled'] as bool? ?? true,
       notes: json['notes'] as String? ?? '',
     );

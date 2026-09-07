@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,7 +12,9 @@ import 'package:timora/features/settings/presentation/screens/data_privacy_scree
 import 'package:timora/features/cloud_sync/presentation/screens/cloud_account_screen.dart';
 import 'package:timora/features/auth/presentation/screens/login_screen.dart';
 import 'package:timora/features/auth/presentation/providers/auth_provider.dart';
+import 'package:timora/core/theme/app_colors.dart';
 import '../providers/user_profile_provider.dart';
+import '../../services/profile_image_service.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -28,14 +31,26 @@ class ProfileScreen extends ConsumerWidget {
       );
 
       if (picked != null) {
-        final appDir = await getApplicationDocumentsDirectory();
-        final fileName = 'profile_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
-        
-        final current = ref.read(userProfileProvider);
-        await ref.read(userProfileProvider.notifier).updateProfile(
-          current.copyWith(customImagePath: savedImage.path),
-        );
+        if (kIsWeb) {
+          final bytes = await picked.readAsBytes();
+          final imageService = ref.read(profileImageServiceProvider);
+          final uploadedUrl = await imageService.uploadProfileImageBytes(bytes);
+          if (uploadedUrl != null) {
+            final current = ref.read(userProfileProvider);
+            await ref.read(userProfileProvider.notifier).updateProfile(
+              current.copyWith(customImagePath: uploadedUrl),
+            );
+          }
+        } else {
+          final appDir = await getApplicationDocumentsDirectory();
+          final fileName = 'profile_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
+          
+          final current = ref.read(userProfileProvider);
+          await ref.read(userProfileProvider.notifier).updateProfile(
+            current.copyWith(customImagePath: savedImage.path),
+          );
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -130,11 +145,13 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final profile = ref.watch(userProfileProvider);
-    final hasCustom = profile.hasCustomImage && File(profile.customImagePath!).existsSync();
+    final hasCustom = profile.hasCustomImage &&
+        (!kIsWeb ? File(profile.customImagePath!).existsSync() : profile.customImagePath!.isNotEmpty);
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
@@ -156,18 +173,19 @@ class ProfileScreen extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
+              color: isDark ? AppColors.cardDark : AppColors.cardLight,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.6),
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
                 width: 1,
               ),
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
+                if (!isDark)
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
               ],
             ),
             child: Column(
@@ -192,12 +210,23 @@ class ProfileScreen extends ConsumerWidget {
                             child: hasCustom
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(36),
-                                    child: Image.file(
-                                      File(profile.customImagePath!),
-                                      width: 72,
-                                      height: 72,
-                                      fit: BoxFit.cover,
-                                    ),
+                                    child: kIsWeb
+                                        ? Image.network(
+                                            profile.customImagePath!,
+                                            width: 72,
+                                            height: 72,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Text(
+                                              profile.avatarPreset,
+                                              style: const TextStyle(fontSize: 34),
+                                            ),
+                                          )
+                                        : Image.file(
+                                            File(profile.customImagePath!),
+                                            width: 72,
+                                            height: 72,
+                                            fit: BoxFit.cover,
+                                          ),
                                   )
                                 : Text(
                                     profile.avatarPreset,
@@ -476,12 +505,13 @@ class ProfileScreen extends ConsumerWidget {
     required Color color,
   }) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.5)),
+        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -540,10 +570,11 @@ class ProfileScreen extends ConsumerWidget {
     Color? iconColor,
   }) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6.0),
       child: Material(
-        color: theme.colorScheme.surface,
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
@@ -552,7 +583,7 @@ class ProfileScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+              border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
             ),
             child: Row(
               children: [

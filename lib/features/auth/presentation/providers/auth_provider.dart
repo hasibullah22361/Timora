@@ -65,38 +65,71 @@ class AuthController extends StateNotifier<AuthState> {
   final AuthRepository _repository;
   final Ref? _ref;
   StreamSubscription? _authSubscription;
+  bool _isSyncTriggered = false;
 
-  AuthController(this._repository, [this._ref]) : super(const AuthState()) {
+  AuthController(this._repository, [this._ref])
+      : super(_repository.getCurrentUser() != null
+            ? AuthState(user: _repository.getCurrentUser())
+            : const AuthState()) {
     _initSession();
     _listenToAuthChanges();
   }
 
-  void _initSession() {
-    final user = _repository.getCurrentUser();
-    if (user != null) {
-      state = AuthState(user: user);
+  Future<void> _initSession() async {
+    try {
+      final session = await _repository.restoreSession();
+      if (!mounted) return;
+      if (session != null) {
+        state = AuthState(user: session.user, isLoading: false);
+        debugPrint('[Auth] Session restored on startup for user: ${session.user.id}');
+        Future.microtask(() => _triggerPostLoginSync(isFullRestore: true));
+      } else {
+        if (state.user == null) {
+          state = const AuthState(user: null, isLoading: false);
+        }
+      }
+    } catch (e) {
+      debugPrint('[Auth] _initSession notice: $e');
+      if (!mounted) return;
+      if (state.user == null) {
+        state = const AuthState(user: null, isLoading: false);
+      }
     }
   }
 
   void _listenToAuthChanges() {
     _authSubscription = _repository.authStateChanges.listen((data) {
+      if (!mounted) return;
       final event = data.event;
       if (event == supabase.AuthChangeEvent.passwordRecovery) {
         state = state.copyWith(isPasswordRecovery: true, clearError: true);
       } else if (event == supabase.AuthChangeEvent.signedOut) {
         state = const AuthState(user: null, isLoading: false);
+        debugPrint('[Auth] User signed out');
+        try {
+          _ref?.read(syncServiceProvider).onUserSignedOut();
+        } catch (_) {}
       } else if (event == supabase.AuthChangeEvent.signedIn) {
         final currentUser = _repository.getCurrentUser();
-        if (currentUser != null && state.user?.id != currentUser.id) {
+        if (currentUser != null) {
           state = state.copyWith(user: currentUser, isLoading: false);
-          // Trigger full cloud sync on sign-in
-          _triggerPostLoginSync();
+          debugPrint('[Auth] Signed in as user: ${currentUser.id}');
+          // Trigger full cloud restore on sign-in via microtask to avoid Riverpod reentrancy
+          Future.microtask(() => _triggerPostLoginSync(isFullRestore: true));
+        }
+      } else if (event == supabase.AuthChangeEvent.initialSession) {
+        final currentUser = _repository.getCurrentUser();
+        if (currentUser != null) {
+          state = state.copyWith(user: currentUser, isLoading: false);
+          debugPrint('[Auth] Initial session for user: ${currentUser.id}');
+          Future.microtask(() => _triggerPostLoginSync(isFullRestore: true));
         }
       } else if (event == supabase.AuthChangeEvent.tokenRefreshed) {
         // Token refresh: update user info without resetting state
         final currentUser = _repository.getCurrentUser();
         if (currentUser != null) {
-          state = state.copyWith(user: currentUser);
+          state = state.copyWith(user: currentUser, isLoading: false);
+          debugPrint('[Auth] Token refreshed for user: ${currentUser.id}');
         }
       } else if (event == supabase.AuthChangeEvent.userUpdated) {
         final currentUser = _repository.getCurrentUser();
@@ -108,23 +141,33 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   /// Triggers sync after login to restore user data from the cloud.
-  void _triggerPostLoginSync() {
-    if (_ref == null) return;
-    try {
-      final syncService = _ref!.read(syncServiceProvider);
-      syncService.syncNow();
-      debugPrint('[Auth] Post-login cloud sync triggered');
-    } catch (e) {
-      debugPrint('[Auth] Post-login sync notice: $e');
-    }
+  void _triggerPostLoginSync({bool isFullRestore = true}) {
+    if (_ref == null || _isSyncTriggered) return;
+    _isSyncTriggered = true;
 
-    // Also download profile image from cloud
-    try {
-      final imgService = _ref!.read(profileImageServiceProvider);
-      imgService.downloadAndCacheProfileImage();
-    } catch (e) {
-      debugPrint('[Auth] Profile image download notice: $e');
-    }
+    Future.microtask(() async {
+      try {
+        final syncService = _ref!.read(syncServiceProvider);
+        if (isFullRestore) {
+          await syncService.fullRestore();
+        } else {
+          await syncService.syncNow();
+        }
+        debugPrint('[Auth] Cloud sync completed (isFullRestore: $isFullRestore)');
+      } catch (e) {
+        debugPrint('[Auth] Post-login sync notice: $e');
+      } finally {
+        _isSyncTriggered = false;
+      }
+
+      // Also download profile image from cloud
+      try {
+        final imgService = _ref!.read(profileImageServiceProvider);
+        await imgService.downloadAndCacheProfileImage();
+      } catch (e) {
+        debugPrint('[Auth] Profile image download notice: $e');
+      }
+    });
   }
 
   @override

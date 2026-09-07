@@ -114,8 +114,10 @@ class GoalRepository {
     final index = _milestones.indexWhere((m) => m.id == milestone.id);
     if (index >= 0) {
       _milestones[index] = milestone.copyWith(updatedAt: DateTime.now());
-      await _saveToStorage();
+    } else {
+      _milestones.add(milestone);
     }
+    await _saveToStorage();
   }
 
   Future<void> deleteMilestone(String id) async {

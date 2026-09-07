@@ -69,24 +69,30 @@ class MilestoneModel {
   }
 
   factory MilestoneModel.fromJson(Map<String, dynamic> json) {
+    final targetRaw = json['targetDate'] ?? json['target_date'];
+    final completedRaw = json['completedAt'] ?? json['completed_at'];
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final sortOrder = (json['order'] ?? json['sort_order']) as int? ?? 0;
+
     return MilestoneModel(
       id: json['id'] as String,
-      goalId: json['goalId'] as String,
-      title: json['title'] as String,
+      goalId: (json['goalId'] ?? json['goal_id']) as String? ?? '',
+      title: json['title'] as String? ?? 'Milestone',
       description: json['description'] as String? ?? '',
       status: MilestoneStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => MilestoneStatus.notStarted,
       ),
       priority: json['priority'] as int? ?? 1,
-      targetDate: json['targetDate'] != null ? DateTime.parse(json['targetDate'] as String) : null,
-      order: json['order'] as int? ?? 0,
-      completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt'] as String) : null,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+      targetDate: targetRaw != null ? DateTime.tryParse(targetRaw.toString()) : null,
+      order: sortOrder,
+      completedAt: completedRaw != null ? DateTime.tryParse(completedRaw.toString()) : null,
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? DateTime.now())
           : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      updatedAt: updatedRaw != null
+          ? DateTime.tryParse(updatedRaw.toString())
           : null,
     );
   }

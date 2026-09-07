@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -43,14 +44,24 @@ class _DiaryDetailScreenState extends ConsumerState<DiaryDetailScreen> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4.0,
-                child: File(path).existsSync()
-                    ? Image.file(File(path))
-                    : const Center(
-                        child: Text(
-                          'Image not found on device',
-                          style: TextStyle(color: Colors.white),
+                child: kIsWeb
+                    ? Image.network(
+                        path,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Text(
+                            'Image not found or inaccessible',
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
-                      ),
+                      )
+                    : (File(path).existsSync()
+                        ? Image.file(File(path))
+                        : const Center(
+                            child: Text(
+                              'Image not found on device',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          )),
               ),
             ),
             Positioned(
@@ -135,10 +146,11 @@ class _DiaryDetailScreenState extends ConsumerState<DiaryDetailScreen> {
     );
 
     if (shouldDelete == true && mounted) {
+      final messenger = ScaffoldMessenger.of(context);
       await ref.read(diaryNotifierProvider.notifier).deleteEntry(_entry.id, _entry.date);
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Diary entry deleted.'),
             behavior: SnackBarBehavior.floating,
@@ -301,7 +313,6 @@ class _DiaryDetailScreenState extends ConsumerState<DiaryDetailScreen> {
                   itemCount: _entry.photoPaths.length,
                   itemBuilder: (context, index) {
                     final path = _entry.photoPaths[index];
-                    final file = File(path);
                     return Padding(
                       padding: const EdgeInsets.only(right: 12.0),
                       child: InkWell(
@@ -309,19 +320,32 @@ class _DiaryDetailScreenState extends ConsumerState<DiaryDetailScreen> {
                         borderRadius: BorderRadius.circular(16),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: file.existsSync()
-                              ? Image.file(
-                                  file,
+                          child: kIsWeb
+                              ? Image.network(
+                                  path,
                                   width: 140,
                                   height: 140,
                                   fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 140,
+                                    height: 140,
+                                    color: Colors.grey.shade300,
+                                    child: const Icon(Icons.broken_image),
+                                  ),
                                 )
-                              : Container(
-                                  width: 140,
-                                  height: 140,
-                                  color: Colors.grey.shade300,
-                                  child: const Icon(Icons.broken_image),
-                                ),
+                              : (File(path).existsSync()
+                                  ? Image.file(
+                                      File(path),
+                                      width: 140,
+                                      height: 140,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(
+                                      width: 140,
+                                      height: 140,
+                                      color: Colors.grey.shade300,
+                                      child: const Icon(Icons.broken_image),
+                                    )),
                         ),
                       ),
                     );

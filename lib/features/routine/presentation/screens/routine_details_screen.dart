@@ -22,8 +22,14 @@ class RoutineDetailsScreen extends ConsumerWidget {
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, stack) => Scaffold(body: Center(child: Text('Error: $error'))),
       data: (routines) {
-        final routine = routines.firstWhere((r) => r.id == routineId, orElse: () => routines.first);
-        
+        final routine = routines.where((r) => r.id == routineId).firstOrNull;
+        if (routine == null) {
+          return Scaffold(
+            backgroundColor: theme.colorScheme.surface,
+            appBar: AppBar(title: const Text('Routine Details')),
+            body: const SizedBox.shrink(),
+          );
+        }
         return Scaffold(
           backgroundColor: theme.colorScheme.surface,
           appBar: AppBar(
@@ -222,32 +228,33 @@ class RoutineDetailsScreen extends ConsumerWidget {
     );
   }
 
-  void _confirmDeleteRoutine(BuildContext context, WidgetRef ref, String id) {
-    showDialog(
+  void _confirmDeleteRoutine(BuildContext context, WidgetRef ref, String id) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete this routine?'),
         content: const Text('This will remove the routine template. Existing completed schedule history will remain.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
-              ref.read(routineNotifierProvider).deleteRoutine(id);
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
+    if (confirmed == true && context.mounted) {
+      Navigator.pop(context);
+      await ref.read(routineNotifierProvider).deleteRoutine(id);
+    }
   }
 
   void _duplicateRoutine(BuildContext context, WidgetRef ref, String id) async {
     final routines = await ref.read(routinesProvider.future);
     final blocks = await ref.read(routineBlocksProvider(id).future);
     
-    final routine = routines.firstWhere((r) => r.id == id);
+    final routine = routines.where((r) => r.id == id).firstOrNull;
+    if (routine == null) return;
     final newRoutineId = const Uuid().v4();
     final duplicatedRoutine = Routine(
       id: newRoutineId,

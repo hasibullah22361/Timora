@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/primary_button.dart';
 import '../providers/user_profile_provider.dart';
+import '../../services/profile_image_service.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -115,13 +117,24 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       );
 
       if (picked != null) {
-        final appDir = await getApplicationDocumentsDirectory();
-        final fileName = 'profile_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
-        
-        setState(() {
-          _customImagePath = savedImage.path;
-        });
+        if (kIsWeb) {
+          final bytes = await picked.readAsBytes();
+          final imageService = ref.read(profileImageServiceProvider);
+          final uploadedUrl = await imageService.uploadProfileImageBytes(bytes);
+          if (uploadedUrl != null) {
+            setState(() {
+              _customImagePath = uploadedUrl;
+            });
+          }
+        } else {
+          final appDir = await getApplicationDocumentsDirectory();
+          final fileName = 'profile_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
+          
+          setState(() {
+            _customImagePath = savedImage.path;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -220,7 +233,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasCustom = _customImagePath != null && File(_customImagePath!).existsSync();
+    final hasCustom = _customImagePath != null &&
+        (!kIsWeb ? File(_customImagePath!).existsSync() : _customImagePath!.isNotEmpty);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -258,12 +272,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         child: hasCustom
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(48),
-                                child: Image.file(
-                                  File(_customImagePath!),
-                                  width: 96,
-                                  height: 96,
-                                  fit: BoxFit.cover,
-                                ),
+                                child: kIsWeb
+                                    ? Image.network(
+                                        _customImagePath!,
+                                        width: 96,
+                                        height: 96,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            Text(_selectedAvatar, style: const TextStyle(fontSize: 48)),
+                                      )
+                                    : Image.file(
+                                        File(_customImagePath!),
+                                        width: 96,
+                                        height: 96,
+                                        fit: BoxFit.cover,
+                                      ),
                               )
                             : Text(_selectedAvatar, style: const TextStyle(fontSize: 48)),
                       ),

@@ -87,4 +87,9 @@ class NotificationSettingsRepository {
 
   double get speakingSpeed => _prefs.getDouble('speakingSpeed') ?? 1.0;
   Future<void> setSpeakingSpeed(double value) => _prefs.setDouble('speakingSpeed', value.clamp(0.1, 2.0));
+
+  String get voiceGender => _prefs.getString('notificationVoiceGender') ?? 'female';
+  Future<void> setVoiceGender(String value) => _prefs.setString('notificationVoiceGender', value);
+  bool get isMaleVoice => voiceGender == 'male';
 }
+

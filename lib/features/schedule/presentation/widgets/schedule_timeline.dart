@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:timora/core/theme/app_colors.dart';
 import 'package:timora/features/schedule/data/models/schedule_activity.dart';
 import '../screens/activity_details_sheet.dart';
 
@@ -67,6 +68,14 @@ class ScheduleTimeline extends StatelessWidget {
                           color: _getBorderColor(context, activity.status, activity.color),
                           width: activity.status == ActivityStatus.current ? 2 : 1,
                         ),
+                        boxShadow: [
+                          if (Theme.of(context).brightness == Brightness.light)
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                        ],
                       ),
                       child: Row(
                         children: [
@@ -132,18 +141,19 @@ class ScheduleTimeline extends StatelessWidget {
   }
 
   Color _getCardColor(BuildContext context, ActivityStatus status, Color baseColor) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (status == ActivityStatus.current) {
-      return baseColor.withValues(alpha: 0.15);
+      return isDark ? baseColor.withValues(alpha: 0.2) : baseColor.withValues(alpha: 0.1);
     }
-    return theme.colorScheme.surface;
+    return isDark ? AppColors.cardDark : AppColors.cardLight;
   }
 
   Color _getBorderColor(BuildContext context, ActivityStatus status, Color baseColor) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (status == ActivityStatus.current) {
       return baseColor;
     }
-    return Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05);
+    return isDark ? AppColors.borderDark : AppColors.borderLight;
   }
 
   Widget _getStatusIcon(ActivityStatus status, Color baseColor) {

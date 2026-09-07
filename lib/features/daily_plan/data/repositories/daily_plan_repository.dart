@@ -146,5 +146,29 @@ class DailyPlanRepository {
     _blocks.removeWhere((b) => b.id == id);
     await _saveToStorage();
   }
+
+  Future<List<DailyPlanModel>> getAllPlans() async {
+    return List.unmodifiable(_plans);
+  }
+
+  Future<List<PlannedTaskBlockModel>> getAllBlocks() async {
+    return List.unmodifiable(_blocks);
+  }
+
+  Future<DailyPlanModel?> getPlanById(String id) async {
+    try {
+      return _plans.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<PlannedTaskBlockModel?> getBlockById(String id) async {
+    try {
+      return _blocks.firstWhere((b) => b.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
 }
 

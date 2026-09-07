@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 enum TimoraWeekStart { monday, sunday }
 enum ArchiveDuration { never, days7, days30, days90 }
 enum TaskPriorityLevel { low, medium, high }
+enum AutopilotMode { off, assisted, fullAutopilot }
 
 enum DashboardWidgetType {
   todayPlan,
@@ -68,6 +69,9 @@ class AppSettings {
   final List<DashboardWidgetType> dashboardOrder;
   final Map<DashboardWidgetType, bool> dashboardVisibility;
 
+  // Autopilot
+  final AutopilotMode autopilotMode;
+
   AppSettings({
     this.themeMode = ThemeMode.system,
     this.reduceMotion = false,
@@ -99,6 +103,7 @@ class AppSettings {
     this.monthlyReviewReminder = true,
     this.automaticStreakFreeze = false,
     this.streakReminders = true,
+    this.autopilotMode = AutopilotMode.assisted,
     this.dashboardOrder = const [
       DashboardWidgetType.todayPlan,
       DashboardWidgetType.dailyReview,
@@ -156,6 +161,7 @@ class AppSettings {
     bool? monthlyReviewReminder,
     bool? automaticStreakFreeze,
     bool? streakReminders,
+    AutopilotMode? autopilotMode,
     List<DashboardWidgetType>? dashboardOrder,
     Map<DashboardWidgetType, bool>? dashboardVisibility,
   }) {
@@ -190,6 +196,7 @@ class AppSettings {
       monthlyReviewReminder: monthlyReviewReminder ?? this.monthlyReviewReminder,
       automaticStreakFreeze: automaticStreakFreeze ?? this.automaticStreakFreeze,
       streakReminders: streakReminders ?? this.streakReminders,
+      autopilotMode: autopilotMode ?? this.autopilotMode,
       dashboardOrder: dashboardOrder ?? this.dashboardOrder,
       dashboardVisibility: dashboardVisibility ?? this.dashboardVisibility,
     );
@@ -203,6 +210,7 @@ class AppSettings {
       'weekStart': weekStart.index,
       'planningBufferPercentage': planningBufferPercentage,
       'defaultFocusSeconds': defaultFocusSeconds,
+      'autopilotMode': autopilotMode.index,
       'dashboardOrder': dashboardOrder.map((e) => e.index).toList(),
       // Add other fields as necessary for complete serialization...
       // For MVP Settings we will store the critical ones that we're actively demonstrating.
@@ -217,6 +225,9 @@ class AppSettings {
         weekStart: TimoraWeekStart.values[json['weekStart'] as int? ?? 0],
         planningBufferPercentage: json['planningBufferPercentage'] as int? ?? 20,
         defaultFocusSeconds: json['defaultFocusSeconds'] as int? ?? 1500,
+        autopilotMode: json['autopilotMode'] != null
+            ? AutopilotMode.values[(json['autopilotMode'] as int).clamp(0, AutopilotMode.values.length - 1)]
+            : AutopilotMode.assisted,
         dashboardOrder: (json['dashboardOrder'] as List<dynamic>?)
             ?.map((e) => DashboardWidgetType.values[e as int])
             .toList() ?? AppSettings().dashboardOrder,

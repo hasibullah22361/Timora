@@ -110,9 +110,12 @@ class _AddEditRoutineSheetState extends ConsumerState<AddEditRoutineSheet> {
     final theme = Theme.of(context);
     final isEditing = widget.routineToEdit != null;
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.9,
-      decoration: BoxDecoration(
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -443,6 +446,8 @@ class _AddEditRoutineSheetState extends ConsumerState<AddEditRoutineSheet> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }

@@ -102,6 +102,9 @@ class HabitRepository {
 
   // --- Habit Logs & Streaks ---
 
+  String? _lastToggledLogId;
+  String? get lastToggledLogId => _lastToggledLogId;
+
   Future<bool> toggleHabitLog(String habitId, DateTime date) async {
     final normalized = DateTime(date.year, date.month, date.day);
     final existingIndex = _logs.indexWhere(
@@ -113,16 +116,19 @@ class HabitRepository {
 
     bool isNowCompleted;
     if (existingIndex >= 0) {
-      _logs.removeAt(existingIndex);
+      final removed = _logs.removeAt(existingIndex);
+      _lastToggledLogId = removed.id;
       isNowCompleted = false;
     } else {
-      _logs.add(HabitLogModel(
+      final newLog = HabitLogModel(
         id: _uuid.v4(),
         habitId: habitId,
         logDate: normalized,
         completed: true,
         createdAt: DateTime.now(),
-      ));
+      );
+      _logs.add(newLog);
+      _lastToggledLogId = newLog.id;
       isNowCompleted = true;
     }
 
@@ -130,6 +136,52 @@ class HabitRepository {
     await _recalculateStreaks(habitId);
     await _saveToStorage();
     return isNowCompleted;
+  }
+
+  Future<HabitLogModel?> getHabitLogForDate(String habitId, DateTime date) async {
+    final normalized = DateTime(date.year, date.month, date.day);
+    try {
+      return _logs.firstWhere(
+        (l) => l.habitId == habitId &&
+               l.logDate.year == normalized.year &&
+               l.logDate.month == normalized.month &&
+               l.logDate.day == normalized.day,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<HabitLogModel>> getAllLogs() async {
+    return List.unmodifiable(_logs);
+  }
+
+  Future<HabitLogModel?> getLogById(String id) async {
+    try {
+      return _logs.firstWhere((l) => l.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveHabitLog(HabitLogModel log) async {
+    final index = _logs.indexWhere((l) => l.id == log.id);
+    if (index >= 0) {
+      _logs[index] = log;
+    } else {
+      _logs.add(log);
+    }
+    await _recalculateStreaks(log.habitId);
+    await _saveToStorage();
+  }
+
+  Future<void> deleteHabitLog(String id) async {
+    final index = _logs.indexWhere((l) => l.id == id);
+    if (index >= 0) {
+      final removed = _logs.removeAt(index);
+      await _recalculateStreaks(removed.habitId);
+      await _saveToStorage();
+    }
   }
 
   Future<List<HabitLogModel>> getHabitLogs(

@@ -182,37 +182,45 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     ThemeMode mode = ThemeMode.system;
-    if (json['themeMode'] != null) {
+    final themeRaw = json['themeMode'] ?? json['theme_mode'];
+    if (themeRaw != null) {
       try {
         mode = ThemeMode.values.firstWhere(
-          (m) => m.name == json['themeMode'],
+          (m) => m.name == themeRaw.toString(),
           orElse: () => ThemeMode.system,
         );
       } catch (_) {}
     }
 
+    final createdRaw = json['createdAt'] ?? json['created_at'];
+    final updatedRaw = json['updatedAt'] ?? json['updated_at'];
+    final nameRaw = (json['fullName'] ?? json['display_name']) as String?;
+    final emailRaw = json['email'] as String? ?? 'user@timora.app';
+
     return UserProfile(
       id: json['id'] as String? ?? 'user_default',
-      fullName: json['fullName'] as String? ?? 'Alex Johnson',
-      username: json['username'] as String? ?? 'alexj',
-      email: json['email'] as String? ?? 'alex@example.com',
+      fullName: (nameRaw != null && nameRaw.isNotEmpty)
+          ? nameRaw
+          : (emailRaw.contains('@') ? emailRaw.split('@').first : 'Timora User'),
+      username: json['username'] as String? ?? (emailRaw.contains('@') ? emailRaw.split('@').first.toLowerCase() : 'user'),
+      email: emailRaw,
       bio: json['bio'] as String? ?? 'Optimizing time, building routines, and staying focused.',
-      avatarPreset: json['avatarPreset'] as String? ?? '⚡',
-      avatarColorValue: json['avatarColorValue'] as int? ?? 0xFF2563EB,
-      customImagePath: json['customImagePath'] as String?,
+      avatarPreset: (json['avatarPreset'] ?? json['avatar_preset']) as String? ?? '⚡',
+      avatarColorValue: ((json['avatarColorValue'] ?? json['avatar_color_value']) as num?)?.toInt() ?? 0xFF2563EB,
+      customImagePath: (json['customImagePath'] ?? json['custom_image_path']) as String?,
       timezone: json['timezone'] as String? ?? 'UTC+05:00 - Islamabad, Karachi',
-      workHoursStartMinutes: json['workHoursStartMinutes'] as int? ?? 540,
-      workHoursEndMinutes: json['workHoursEndMinutes'] as int? ?? 1080,
-      dailyGoalHours: (json['dailyGoalHours'] as num?)?.toDouble() ?? 6.0,
-      dailyTaskGoal: json['dailyTaskGoal'] as int? ?? 5,
-      routinePreference: json['routinePreference'] as String? ?? 'Time-blocking',
-      notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
+      workHoursStartMinutes: (json['workHoursStartMinutes'] ?? json['work_hours_start_minutes']) as int? ?? 540,
+      workHoursEndMinutes: (json['workHoursEndMinutes'] ?? json['work_hours_end_minutes']) as int? ?? 1080,
+      dailyGoalHours: ((json['dailyGoalHours'] ?? json['daily_goal_hours']) as num?)?.toDouble() ?? 6.0,
+      dailyTaskGoal: (json['dailyTaskGoal'] ?? json['daily_task_goal']) as int? ?? 5,
+      routinePreference: (json['routinePreference'] ?? json['routine_preference']) as String? ?? 'Time-blocking',
+      notificationsEnabled: (json['notificationsEnabled'] ?? json['notifications_enabled']) as bool? ?? true,
       themeMode: mode,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+      createdAt: createdRaw != null
+          ? (DateTime.tryParse(createdRaw.toString()) ?? DateTime.now())
           : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      updatedAt: updatedRaw != null
+          ? (DateTime.tryParse(updatedRaw.toString()) ?? DateTime.now())
           : DateTime.now(),
     );
   }
