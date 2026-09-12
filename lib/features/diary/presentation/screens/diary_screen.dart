@@ -11,6 +11,8 @@ import 'diary_detail_screen.dart';
 import 'diary_favorites_screen.dart';
 import 'diary_search_screen.dart';
 import 'diary_stats_screen.dart';
+import 'package:timora/features/ai_assistant/presentation/widgets/quick_voice_note_sheet.dart';
+import 'package:timora/features/ai_assistant/presentation/widgets/daily_debrief_sheet.dart';
 
 class DiaryScreen extends ConsumerWidget {
   const DiaryScreen({super.key});
@@ -30,6 +32,11 @@ class DiaryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Journal & Diary', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.mic, color: Color(0xFF6366F1)),
+            tooltip: 'Quick Voice Note',
+            onPressed: () => QuickVoiceNoteSheet.show(context),
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'Search & Filters',
@@ -71,6 +78,11 @@ class DiaryScreen extends ConsumerWidget {
             },
           ),
           IconButton(
+            icon: const Icon(Icons.nightlight_round, color: Color(0xFF6366F1)),
+            tooltip: 'Daily Debrief',
+            onPressed: () => DailyDebriefSheet.show(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_none_outlined),
             tooltip: 'Daily Reminder',
             onPressed: () {
@@ -84,15 +96,29 @@ class DiaryScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CreateEditDiaryScreen()),
-          );
-        },
-        icon: const Icon(Icons.edit_note, size: 22),
-        label: const Text('Write Entry', style: TextStyle(fontWeight: FontWeight.bold)),
+      floatingActionButton: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'diaryVoiceNoteFab',
+            onPressed: () => QuickVoiceNoteSheet.show(context),
+            icon: const Icon(Icons.mic, size: 20, color: Colors.white),
+            label: const Text('Voice Note', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            backgroundColor: const Color(0xFF6366F1),
+          ),
+          const SizedBox(width: 10),
+          FloatingActionButton.extended(
+            heroTag: 'diaryWriteEntryFab',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CreateEditDiaryScreen()),
+              );
+            },
+            icon: const Icon(Icons.edit_note, size: 22),
+            label: const Text('Write Entry', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -100,8 +126,15 @@ class DiaryScreen extends ConsumerWidget {
             ref.invalidate(allDiaryEntriesProvider);
             ref.invalidate(diaryStreakStatsProvider);
             ref.invalidate(onThisDayEntriesProvider);
+            await Future.wait([
+              ref.read(allDiaryEntriesProvider.future),
+              ref.read(diaryStreakStatsProvider.future),
+              ref.read(onThisDayEntriesProvider.future),
+            ]);
           },
           child: ListView(
+            key: const PageStorageKey('diary_scroll_view'),
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             children: [
               // Header Date & Streak Pill

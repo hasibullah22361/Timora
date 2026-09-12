@@ -66,10 +66,19 @@ class _DailyReportTab extends ConsumerWidget {
     final dailyAsync = ref.watch(dailyReportProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return dailyAsync.when(
-      data: (report) {
-        return ListView(
-          padding: const EdgeInsets.all(20),
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(dailyReportProvider);
+        await ref.read(dailyReportProvider.future);
+      },
+      child: dailyAsync.when(
+        skipLoadingOnRefresh: true,
+        skipLoadingOnReload: true,
+        data: (report) {
+          return ListView(
+            key: const PageStorageKey('daily_report_scroll'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
           children: [
             Text(
               'Today’s Productivity Report',
@@ -127,11 +136,20 @@ class _DailyReportTab extends ConsumerWidget {
             _statRowCard('Routine Consistency', '${report.routineConsistency.round()}%', Icons.loop, isDark),
             const SizedBox(height: 10),
             _statRowCard('Tasks Completed', '${report.tasksCompleted} done (${report.tasksRemaining} remaining)', Icons.task_alt, isDark),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Center(child: Text('Error: $e')),
+            ),
           ],
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+        ),
+      ),
     );
   }
 }
@@ -142,10 +160,19 @@ class _WeeklyReportTab extends ConsumerWidget {
     final weeklyAsync = ref.watch(weeklyReportProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return weeklyAsync.when(
-      data: (report) {
-        return ListView(
-          padding: const EdgeInsets.all(20),
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(weeklyReportProvider);
+        await ref.read(weeklyReportProvider.future);
+      },
+      child: weeklyAsync.when(
+        skipLoadingOnRefresh: true,
+        skipLoadingOnReload: true,
+        data: (report) {
+          return ListView(
+            key: const PageStorageKey('weekly_report_scroll'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
           children: [
             Text(
               'Weekly Synthesis',
@@ -176,11 +203,20 @@ class _WeeklyReportTab extends ConsumerWidget {
             _statRowCard('Recovered Tasks', '${report.recoveredTasks} tasks recovered via Autopilot', Icons.auto_awesome, isDark),
             const SizedBox(height: 10),
             _statRowCard('Goal Milestone Progress', '${report.goalProgress.round()}% on track', Icons.flag, isDark),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Center(child: Text('Error: $e')),
+            ),
           ],
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+        ),
+      ),
     );
   }
 }
@@ -191,10 +227,19 @@ class _MonthlyReportTab extends ConsumerWidget {
     final monthlyAsync = ref.watch(monthlyReportProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return monthlyAsync.when(
-      data: (report) {
-        return ListView(
-          padding: const EdgeInsets.all(20),
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(monthlyReportProvider);
+        await ref.read(monthlyReportProvider.future);
+      },
+      child: monthlyAsync.when(
+        skipLoadingOnRefresh: true,
+        skipLoadingOnReload: true,
+        data: (report) {
+          return ListView(
+            key: const PageStorageKey('monthly_report_scroll'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
           children: [
             Text(
               'Monthly Productivity Review',
@@ -259,11 +304,20 @@ class _MonthlyReportTab extends ConsumerWidget {
                     ],
                   ),
                 )),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Center(child: Text('Error: $e')),
+            ),
           ],
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+        ),
+      ),
     );
   }
 }

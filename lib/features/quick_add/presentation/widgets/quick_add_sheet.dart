@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:timora/features/tasks/data/models/task_model.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
 import 'package:timora/features/quick_add/services/quick_add_parser.dart';
+import 'package:timora/features/ai_assistant/presentation/widgets/quick_voice_note_sheet.dart';
 
 class QuickAddSheet extends ConsumerStatefulWidget {
   const QuickAddSheet({super.key});
@@ -174,13 +175,13 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               suffixIcon: IconButton(
                 icon: Icon(Icons.mic, color: theme.colorScheme.primary),
-                tooltip: 'Voice Input',
+                tooltip: 'Quick Voice Note',
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Voice-to-task is active! Speak your task naturally.'),
-                      duration: Duration(seconds: 2),
-                    ),
+                  final currentText = _controller.text.trim();
+                  Navigator.of(context).pop();
+                  QuickVoiceNoteSheet.show(
+                    context,
+                    initialText: currentText.isNotEmpty ? currentText : null,
                   );
                 },
               ),

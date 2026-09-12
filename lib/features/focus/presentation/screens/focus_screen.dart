@@ -254,9 +254,16 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
     final ambientState = ref.watch(ambientSoundServiceProvider);
     final ambientService = ref.read(ambientSoundServiceProvider.notifier);
 
-    return ListView(
-      padding: const EdgeInsets.all(20.0),
-      children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(focusStatsProvider);
+        await ref.read(focusStatsProvider.future);
+      },
+      child: ListView(
+        key: const PageStorageKey('focus_setup_scroll'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20.0),
+        children: [
         // Stats Hero Banner
         statsAsync.when(
           data: (stats) => Container(
@@ -373,8 +380,9 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
           }).toList(),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStatItem(String val, String label) {
     return Column(

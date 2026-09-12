@@ -13,6 +13,8 @@ import '../../daily_plan/data/repositories/daily_plan_repository.dart';
 import '../../weekly_plan/data/repositories/weekly_plan_repository.dart';
 import '../../weekly_plan/presentation/providers/weekly_plan_provider.dart';
 import '../../monthly_plan/data/repositories/monthly_plan_repository.dart';
+import '../../analytics/data/models/analytics_models.dart';
+import '../../analytics/services/insights_engine_service.dart';
 
 final aiPrivacyProvider = StateProvider<AIPrivacySettings>((ref) => AIPrivacySettings());
 
@@ -153,6 +155,21 @@ class AIContextBuilder {
         buffer.writeln('- Average Mood Rating: ${diarySummary.averageMood.toStringAsFixed(1)} / 5.0');
         buffer.writeln('- Average Energy Level: ${diarySummary.averageEnergy.toStringAsFixed(1)} / 5.0');
         buffer.writeln('- Total Reflections Logged: ${diarySummary.totalEntries}');
+      }
+    } catch (_) {}
+
+    // 8. Timora Insights & Productivity Patterns Context
+    try {
+      final insightsEngine = _ref.read(insightsEngineServiceProvider);
+      final insights = await insightsEngine.generateInsights(AnalyticsPeriod.last7Days);
+      if (insights.isNotEmpty) {
+        buffer.writeln('\nReal Timora Insights & Productivity Patterns (Last 7 Days):');
+        for (final i in insights) {
+          buffer.writeln('- [${i.category.name}] ${i.description}');
+          if (i.recommendation.isNotEmpty) {
+            buffer.writeln('  Actionable Recommendation: ${i.recommendation}');
+          }
+        }
       }
     } catch (_) {}
 

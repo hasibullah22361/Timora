@@ -7,7 +7,10 @@ import 'create_edit_task_sheet.dart';
 import 'task_details_screen.dart';
 
 import 'package:timora/core/theme/app_colors.dart';
+import 'package:timora/core/widgets/timora_banner_ad.dart';
 import 'package:timora/features/quick_add/presentation/widgets/quick_add_sheet.dart';
+import 'package:timora/features/ai_assistant/presentation/widgets/quick_voice_note_sheet.dart';
+import 'package:timora/features/reviews/presentation/screens/reviews_screen.dart';
 
 class TasksScreen extends ConsumerWidget {
   const TasksScreen({super.key});
@@ -17,16 +20,32 @@ class TasksScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final searchQuery = ref.watch(taskSearchQueryProvider);
-    
+
     // We only use the "all tasks" provider here if searching, otherwise we split by category
-    
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Tasks', style: TextStyle(fontWeight: FontWeight.bold)),
+        title:
+            const Text('Tasks', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.rate_review_outlined, color: Color(0xFF10B981)),
+            tooltip: 'Review & Reflection',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReviewsScreen()),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.mic, color: Color(0xFF6366F1)),
+            tooltip: 'Quick Voice Note',
+            onPressed: () => QuickVoiceNoteSheet.show(context),
+          ),
           IconButton(
             icon: const Icon(Icons.auto_awesome, color: Color(0xFF7C3AED)),
             tooltip: 'Quick Add with AI',
@@ -34,34 +53,112 @@ class TasksScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(allTasksProvider);
+          await ref.read(allTasksProvider.future);
+        },
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          key: const PageStorageKey('tasks_screen_scroll'),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: SearchBar(
                 hintText: 'Search tasks...',
                 leading: const Icon(Icons.search),
-                onChanged: (val) => ref.read(taskSearchQueryProvider.notifier).state = val,
+                onChanged: (val) =>
+                    ref.read(taskSearchQueryProvider.notifier).state = val,
                 elevation: WidgetStateProperty.all(0),
-                backgroundColor: WidgetStateProperty.all(isDark ? AppColors.cardDark : AppColors.cardLight),
+                backgroundColor: WidgetStateProperty.all(
+                    isDark ? AppColors.cardDark : AppColors.cardLight),
                 shape: WidgetStateProperty.all(RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                  side: BorderSide(
+                      color: isDark
+                          ? AppColors.borderDark
+                          : AppColors.borderLight),
                 )),
-                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 16)),
+                padding: WidgetStateProperty.all(
+                    const EdgeInsets.symmetric(horizontal: 16)),
               ),
             ),
           ),
-          
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ReviewsScreen()),
+                  );
+                },
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF131B2E) : const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFBBF7D0),
+                      width: 1.1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.rate_review_outlined, color: Color(0xFF10B981), size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Review & Reflection',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'Reflect on today’s task velocity and achievements',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, size: 20, color: Color(0xFF10B981)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(
+            child: TimoraBannerAd(
+              margin: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            ),
+          ),
           if (searchQuery.isNotEmpty)
             _buildSearchResults(ref, theme)
           else
             ..._buildStandardSections(ref, theme),
-            
           const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
         ],
       ),
+    ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'tasks_fab',
         onPressed: () {
@@ -81,24 +178,36 @@ class TasksScreen extends ConsumerWidget {
   Widget _buildSearchResults(WidgetRef ref, ThemeData theme) {
     final tasksAsync = ref.watch(allTasksProvider);
     return tasksAsync.when(
+      skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
       data: (tasks) {
         if (tasks.isEmpty) {
           return SliverFillRemaining(
-            child: Center(child: Text('No tasks found', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
+            child: Center(
+                child: Text('No tasks found',
+                    style:
+                        TextStyle(color: theme.colorScheme.onSurfaceVariant))),
           );
         }
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) => TaskCard(
+              key: ValueKey(tasks[index].id),
               task: tasks[index],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TaskDetailsScreen(taskId: tasks[index].id))),
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          TaskDetailsScreen(taskId: tasks[index].id))),
             ),
             childCount: tasks.length,
           ),
         );
       },
-      loading: () => const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator())),
-      error: (err, _) => SliverToBoxAdapter(child: Center(child: Text('Error: $err'))),
+      loading: () => const SliverToBoxAdapter(
+          child: Center(child: CircularProgressIndicator())),
+      error: (err, _) =>
+          SliverToBoxAdapter(child: Center(child: Text('Error: $err'))),
     );
   }
 
@@ -140,11 +249,15 @@ class TasksScreen extends ConsumerWidget {
     required WidgetRef ref,
   }) {
     final asyncData = ref.watch(provider);
-    
+
     return asyncData.when(
+      skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
       data: (tasks) {
-        if (tasks.isEmpty && title != 'TODAY') return const SliverToBoxAdapter(child: SizedBox.shrink());
-        
+        if (tasks.isEmpty && title != 'TODAY') {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+
         return SliverMainAxisGroup(
           slivers: [
             SliverToBoxAdapter(
@@ -165,14 +278,18 @@ class TasksScreen extends ConsumerWidget {
                     ),
                     const Spacer(),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '${tasks.length}',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: color),
                       ),
                     ),
                   ],
@@ -182,8 +299,10 @@ class TasksScreen extends ConsumerWidget {
             if (tasks.isEmpty)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: Text(emptyMessage, style: const TextStyle(color: Colors.grey)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: Text(emptyMessage,
+                      style: const TextStyle(color: Colors.grey)),
                 ),
               )
             else
@@ -192,8 +311,13 @@ class TasksScreen extends ConsumerWidget {
                   (context, index) {
                     final task = tasks[index];
                     return TaskCard(
+                      key: ValueKey(task.id),
                       task: task,
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TaskDetailsScreen(taskId: task.id))),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  TaskDetailsScreen(taskId: task.id))),
                     );
                   },
                   childCount: tasks.length,
@@ -202,7 +326,9 @@ class TasksScreen extends ConsumerWidget {
           ],
         );
       },
-      loading: () => const SliverToBoxAdapter(child: SizedBox(height: 50, child: Center(child: CircularProgressIndicator()))),
+      loading: () => const SliverToBoxAdapter(
+          child: SizedBox(
+              height: 50, child: Center(child: CircularProgressIndicator()))),
       error: (e, _) => SliverToBoxAdapter(child: Text('Error: $e')),
     );
   }

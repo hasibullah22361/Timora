@@ -4,6 +4,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../services/voice_input_service.dart';
 import '../../../schedule/presentation/providers/schedule_provider.dart';
 import '../screens/ai_assistant_screen.dart';
+import 'quick_voice_note_sheet.dart';
 
 enum SpeechUIState {
   idle,
@@ -117,9 +118,11 @@ class _VoiceInputSheetState extends ConsumerState<VoiceInputSheet> with SingleTi
               _textController.text = result.recognizedWords;
             });
           },
-          listenFor: const Duration(seconds: 30),
-          pauseFor: const Duration(seconds: 3),
-          partialResults: true,
+          listenOptions: stt.SpeechListenOptions(
+            listenMode: stt.ListenMode.dictation,
+            partialResults: true,
+            cancelOnError: false,
+          ),
         );
       } else {
         setState(() {
@@ -287,7 +290,34 @@ class _VoiceInputSheetState extends ConsumerState<VoiceInputSheet> with SingleTi
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.65)),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: () {
+                Navigator.of(context).pop();
+                QuickVoiceNoteSheet.show(context);
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.mic, size: 15, color: Color(0xFF6366F1)),
+                    SizedBox(width: 6),
+                    Text(
+                      'Switch to Quick Voice Note (Diary + Tasks)',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF6366F1)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
 
             // Pulsating Mic Button
             GestureDetector(

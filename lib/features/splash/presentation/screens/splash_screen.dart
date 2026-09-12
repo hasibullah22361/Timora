@@ -24,7 +24,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1600),
+      duration: const Duration(milliseconds: 450),
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
@@ -36,26 +36,29 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
   }
 
   Future<void> _initializeAppAndNavigate() async {
-    // 1. Allow splash fade animation to display
-    await Future.delayed(const Duration(milliseconds: 1800));
-    if (!mounted) return;
-
     final onboardingRepo = ref.read(onboardingRepositoryProvider);
     final isComplete = onboardingRepo.isOnboardingComplete();
 
     if (!isComplete) {
+      await Future.delayed(const Duration(milliseconds: 350));
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const OnboardingScreen()),
       );
       return;
     }
 
-    // 2. Asynchronously restore / refresh session via AuthRepository
+    // Restore session concurrently with a concise splash presentation
     final authRepo = ref.read(authRepositoryProvider);
-    final session = await authRepo.restoreSession();
+    final results = await Future.wait([
+      Future.delayed(const Duration(milliseconds: 400)),
+      authRepo.restoreSession(),
+    ]);
     if (!mounted) return;
 
-    // 3. Confirm authenticated state: either restored session or authController has user
+    final session = results[1] as dynamic;
+
+    // Confirm authenticated state: either restored session or authController has user
     final authState = ref.read(authControllerProvider);
     final isAuthenticated = (session != null && session.isValid) || authState.isAuthenticated;
 

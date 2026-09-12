@@ -11,12 +11,17 @@ class ScheduleTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayActivities = activities
+        .where((a) => a.status != ActivityStatus.replaced)
+        .toList();
+
     return ListView.builder(
+      key: const PageStorageKey('schedule_timeline_scroll'),
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      itemCount: activities.length,
+      itemCount: displayActivities.length,
       itemBuilder: (context, index) {
-        final activity = activities[index];
-        final isLast = index == activities.length - 1;
+        final activity = displayActivities[index];
+        final isLast = index == displayActivities.length - 1;
         
         return IntrinsicHeight(
           child: Row(
@@ -89,15 +94,39 @@ class ScheduleTimeline extends StatelessWidget {
                                   activity.title,
                                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    decoration: activity.status == ActivityStatus.skipped 
+                                    decoration: (activity.status == ActivityStatus.skipped || activity.status == ActivityStatus.replaced)
                                         ? TextDecoration.lineThrough 
                                         : null,
-                                    color: activity.status == ActivityStatus.skipped 
+                                    color: (activity.status == ActivityStatus.skipped || activity.status == ActivityStatus.replaced)
                                         ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5) 
                                         : null,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
+                                if (activity.status == ActivityStatus.replaced && activity.replacementActivityTitle != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4.0),
+                                    child: Text(
+                                      '🔄 Replaced with: ${activity.replacementActivityTitle}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.amber.shade800,
+                                      ),
+                                    ),
+                                  )
+                                else if (activity.replacesActivityId != null && activity.originalActivityTitle != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4.0),
+                                    child: Text(
+                                      '✨ Replaces: ${activity.originalActivityTitle}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
                                 Row(
                                   children: [
                                     _getStatusIcon(activity.status, activity.color),
@@ -135,6 +164,8 @@ class ScheduleTimeline extends StatelessWidget {
         return Colors.green;
       case ActivityStatus.skipped:
         return Colors.grey;
+      case ActivityStatus.replaced:
+        return Colors.amber.shade700;
       case ActivityStatus.upcoming:
         return theme.colorScheme.onSurface.withValues(alpha: 0.6);
     }
@@ -145,6 +176,9 @@ class ScheduleTimeline extends StatelessWidget {
     if (status == ActivityStatus.current) {
       return isDark ? baseColor.withValues(alpha: 0.2) : baseColor.withValues(alpha: 0.1);
     }
+    if (status == ActivityStatus.replaced) {
+      return isDark ? Colors.amber.withValues(alpha: 0.08) : Colors.amber.withValues(alpha: 0.06);
+    }
     return isDark ? AppColors.cardDark : AppColors.cardLight;
   }
 
@@ -152,6 +186,9 @@ class ScheduleTimeline extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     if (status == ActivityStatus.current) {
       return baseColor;
+    }
+    if (status == ActivityStatus.replaced) {
+      return Colors.amber.withValues(alpha: 0.4);
     }
     return isDark ? AppColors.borderDark : AppColors.borderLight;
   }
@@ -172,6 +209,10 @@ class ScheduleTimeline extends StatelessWidget {
       case ActivityStatus.skipped:
         iconData = Icons.cancel_rounded;
         color = Colors.grey;
+        break;
+      case ActivityStatus.replaced:
+        iconData = Icons.swap_horiz_rounded;
+        color = Colors.amber.shade700;
         break;
       case ActivityStatus.upcoming:
         iconData = Icons.radio_button_unchecked_rounded;

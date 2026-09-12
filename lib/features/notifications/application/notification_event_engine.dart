@@ -74,10 +74,10 @@ class NotificationEventEngine {
     final endMins = end.hour * 60 + end.minute;
 
     if (startMins <= endMins) {
-      return timeMins >= startMins && timeMins <= endMins;
+      return timeMins >= startMins && timeMins < endMins;
     } else {
       // Wraps around midnight
-      return timeMins >= startMins || timeMins <= endMins;
+      return timeMins >= startMins || timeMins < endMins;
     }
   }
 
@@ -199,6 +199,18 @@ class NotificationEventEngine {
       eventsToSchedule.add(nextDayPlanEvent);
     }
 
+    // ── 6. MORNING BRIEF NOTIFICATION ──
+    final morningBriefEvent = buildMorningBriefEvent(now);
+    if (morningBriefEvent != null) {
+      eventsToSchedule.add(morningBriefEvent);
+    }
+
+    // ── 7. DAILY DEBRIEF NOTIFICATION ──
+    final dailyDebriefEvent = buildDailyDebriefEvent(now);
+    if (dailyDebriefEvent != null) {
+      eventsToSchedule.add(dailyDebriefEvent);
+    }
+
     debugPrint(
         '[NotificationEngine] Syncing ${eventsToSchedule.length} schedule events for $date');
     await _syncEvents(eventsToSchedule);
@@ -231,6 +243,50 @@ class NotificationEventEngine {
       notificationBody: pair.notificationBody,
       spokenMessage: pair.spokenMessage,
       scheduledTime: triggerTime,
+    );
+  }
+
+  /// Builds the morning briefing notification event.
+  NotificationEvent? buildMorningBriefEvent(DateTime now) {
+    if (!_settings.morningBriefEnabled) return null;
+
+    final briefTime = _settings.morningBriefTime;
+    final scheduled = DateTime(now.year, now.month, now.day, briefTime.hour, briefTime.minute);
+    final triggerTime = scheduled.isAfter(now) ? scheduled : scheduled.add(const Duration(days: 1));
+
+    if (_isQuietHours(triggerTime)) return null;
+
+    return NotificationEvent.create(
+      sourceType: NotificationSourceType.other,
+      sourceId: 'morning_brief',
+      eventType: NotificationEventType.morningBrief,
+      title: '🌅 Good Morning — Your Daily Briefing',
+      notificationBody: 'Tap to view your priorities and daily plan.',
+      spokenMessage: _settings.morningBriefAutoPlay ? 'Good morning. Your daily brief is ready.' : '',
+      scheduledTime: triggerTime,
+      metadata: {'payload': 'morning_brief'},
+    );
+  }
+
+  /// Builds the 🌙 Daily Debrief notification event.
+  NotificationEvent? buildDailyDebriefEvent(DateTime now) {
+    if (!_settings.dailyDebriefEnabled) return null;
+
+    final debriefTime = _settings.dailyDebriefTime;
+    final scheduled = DateTime(now.year, now.month, now.day, debriefTime.hour, debriefTime.minute);
+    final triggerTime = scheduled.isAfter(now) ? scheduled : scheduled.add(const Duration(days: 1));
+
+    if (_isQuietHours(triggerTime)) return null;
+
+    return NotificationEvent.create(
+      sourceType: NotificationSourceType.other,
+      sourceId: 'daily_debrief',
+      eventType: NotificationEventType.dailyDebrief,
+      title: '🌙 Time for your Daily Debrief',
+      notificationBody: 'Take 1 minute to reflect: What went well today?',
+      spokenMessage: '',
+      scheduledTime: triggerTime,
+      metadata: {'payload': 'daily_debrief'},
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:timora/features/schedule/data/models/schedule_activity.dart';
 import '../providers/schedule_provider.dart';
 import 'add_edit_activity_sheet.dart';
+import 'replace_activity_sheet.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
 import 'package:timora/features/tasks/presentation/screens/create_edit_task_sheet.dart';
 import 'package:timora/features/tasks/presentation/screens/task_details_screen.dart';
@@ -84,6 +85,74 @@ class ActivityDetailsSheet extends ConsumerWidget {
             _buildDetailRow(context, Icons.info_outline_rounded, 'Status: ${activity.status.name.toUpperCase()}'),
             const SizedBox(height: 16),
             
+            if (activity.status == ActivityStatus.replaced) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.swap_horiz_rounded, color: Colors.amber),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Activity Replaced',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber),
+                          ),
+                          if (activity.replacementActivityTitle != null)
+                            Text(
+                              'Replaced by: ${activity.replacementActivityTitle}',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ] else if (activity.replacesActivityId != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome_rounded, color: theme.colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Replacement Activity',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: theme.colorScheme.primary),
+                          ),
+                          if (activity.originalActivityTitle != null)
+                            Text(
+                              'Replaces original: ${activity.originalActivityTitle}',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // Linked Tasks
             _buildLinkedTasks(context, ref),
             
@@ -108,7 +177,7 @@ class ActivityDetailsSheet extends ConsumerWidget {
                   ),
                   const SizedBox(width: 12),
                 ],
-                if (activity.status != ActivityStatus.completed) ...[
+                if (activity.status != ActivityStatus.completed && activity.status != ActivityStatus.replaced) ...[
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () async {
@@ -125,7 +194,7 @@ class ActivityDetailsSheet extends ConsumerWidget {
                   ),
                   const SizedBox(width: 12),
                 ],
-                if (activity.status != ActivityStatus.skipped) ...[
+                if (activity.status != ActivityStatus.skipped && activity.status != ActivityStatus.replaced) ...[
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () async {
@@ -145,6 +214,30 @@ class ActivityDetailsSheet extends ConsumerWidget {
                 ],
               ],
             ),
+            if (activity.status != ActivityStatus.completed && activity.status != ActivityStatus.replaced) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (ctx) => ReplaceActivitySheet(originalActivity: activity),
+                    );
+                  },
+                  icon: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF2563EB)),
+                  label: const Text('Replace Activity', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: Color(0xFF2563EB)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             if (activity.isOverridden) ...[
               Center(

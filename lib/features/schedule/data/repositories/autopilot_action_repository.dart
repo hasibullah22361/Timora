@@ -73,4 +73,20 @@ class AutopilotActionRepository {
     final list = await getAllActions();
     return list.where((a) => a.entityId == entityId).length;
   }
+
+  Future<void> deleteAction(String id) async {
+    final list = await getAllActions();
+    list.removeWhere((a) => a.id == id);
+    final jsonString = jsonEncode(list.map((a) => a.toJson()).toList());
+    await _prefs.setString(_storageKey, jsonString);
+
+    try {
+      await _ref.read(syncRepositoryProvider).enqueueChange(
+        entityType: 'autopilot_actions',
+        entityId: id,
+        operation: SyncOperation.delete,
+      );
+      _ref.read(syncServiceProvider).autoSync();
+    } catch (_) {}
+  }
 }

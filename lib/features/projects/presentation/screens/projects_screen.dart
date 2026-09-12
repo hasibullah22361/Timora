@@ -72,56 +72,77 @@ class ProjectsScreen extends ConsumerWidget {
   Widget _buildProjectsList(WidgetRef ref, FutureProvider<List<ProjectModel>> provider, String emptyMsg) {
     final asyncProjects = ref.watch(provider);
     
-    return asyncProjects.when(
-      data: (projects) {
-        if (projects.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.folder_open_rounded, size: 48, color: Color(0xFF2563EB)),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No projects yet.',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Create your first project to get started.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.only(top: 16, bottom: 100),
-          itemCount: projects.length,
-          itemBuilder: (context, index) {
-            final project = projects[index];
-            return ProjectCard(
-              project: project,
-              onTap: () => Navigator.push(
-                context, 
-                MaterialPageRoute(builder: (_) => ProjectDetailsScreen(projectId: project.id))
-              ),
-            );
-          },
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(provider);
+        await ref.read(provider.future);
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      child: asyncProjects.when(
+        skipLoadingOnRefresh: true,
+        skipLoadingOnReload: true,
+        data: (projects) {
+          if (projects.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 80.0, left: 32.0, right: 32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.folder_open_rounded, size: 48, color: Color(0xFF2563EB)),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No projects yet.',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Create your first project to get started.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
+          return ListView.builder(
+            key: PageStorageKey('projects_list_${provider.hashCode}'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(top: 16, bottom: 100),
+            itemCount: projects.length,
+            itemBuilder: (context, index) {
+              final project = projects[index];
+              return ProjectCard(
+                project: project,
+                onTap: () => Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (_) => ProjectDetailsScreen(projectId: project.id))
+                ),
+              );
+            },
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Center(child: Text('Error: $e')),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

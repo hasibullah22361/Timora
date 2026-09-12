@@ -19,7 +19,10 @@ class SmartReschedulingService {
   /// Detects all time overlaps for a given day's list of activities
   static List<ScheduleConflict> detectConflicts(List<ScheduleActivity> activities) {
     final active = activities
-        .where((a) => a.status != ActivityStatus.skipped && a.status != ActivityStatus.completed)
+        .where((a) =>
+            a.status != ActivityStatus.skipped &&
+            a.status != ActivityStatus.completed &&
+            a.status != ActivityStatus.replaced)
         .toList();
 
     // Sort by startTime
@@ -65,31 +68,40 @@ class SmartReschedulingService {
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
     final resolved = <ScheduleActivity>[];
+    ScheduleActivity? lastActive;
 
     for (int i = 0; i < sorted.length; i++) {
       final current = sorted[i];
-      if (resolved.isEmpty) {
+      if (current.status == ActivityStatus.skipped ||
+          current.status == ActivityStatus.completed ||
+          current.status == ActivityStatus.replaced) {
         resolved.add(current);
         continue;
       }
 
-      final prev = resolved.last;
-      if (current.startTime.isBefore(prev.endTime)) {
-        // Shift current activity immediately following previous activity
+      if (lastActive == null) {
+        resolved.add(current);
+        lastActive = current;
+        continue;
+      }
+
+      if (current.startTime.isBefore(lastActive.endTime)) {
+        // Shift current activity immediately following previous active activity
         final duration = current.endTime.difference(current.startTime);
-        final newStart = prev.endTime;
+        final newStart = lastActive.endTime;
         final newEnd = newStart.add(duration);
 
-        resolved.add(
-          current.copyWith(
-            startTime: newStart,
-            endTime: newEnd,
-            isOverridden: true,
-            updatedAt: DateTime.now(),
-          ),
+        final shifted = current.copyWith(
+          startTime: newStart,
+          endTime: newEnd,
+          isOverridden: true,
+          updatedAt: DateTime.now(),
         );
+        resolved.add(shifted);
+        lastActive = shifted;
       } else {
         resolved.add(current);
+        lastActive = current;
       }
     }
 

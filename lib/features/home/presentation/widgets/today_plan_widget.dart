@@ -11,7 +11,8 @@ class TodayPlanWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final date = DateTime.now();
+    final now = DateTime.now();
+    final date = DateTime(now.year, now.month, now.day);
     final timelineAsync = ref.watch(timelineProvider(date));
 
     return Column(
@@ -36,6 +37,8 @@ class TodayPlanWidget extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         timelineAsync.when(
+          skipLoadingOnRefresh: true,
+          skipLoadingOnReload: true,
           data: (items) {
             final pendingBlocks = items.where((i) => i.type == TimelineItemType.block && !i.isCompleted).toList();
             

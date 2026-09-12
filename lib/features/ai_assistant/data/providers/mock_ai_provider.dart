@@ -35,6 +35,99 @@ class DynamicContextAIProvider implements AIProvider {
         .toList();
 
     // -------------------------------------------------------------
+    // 0a. Morning Brief / Morning Briefing
+    // -------------------------------------------------------------
+    if (lower.contains('morning brief') || lower.contains('morning briefing')) {
+      final prioritiesLine = lines.firstWhere(
+        (l) => l.startsWith('Top Priorities:'),
+        orElse: () => '',
+      );
+      final firstActLine = lines.firstWhere(
+        (l) => l.startsWith('First Activity:'),
+        orElse: () => '',
+      );
+
+      final priorities = prioritiesLine.isNotEmpty
+          ? prioritiesLine.replaceFirst('Top Priorities:', '').trim().split(', ')
+          : <String>[];
+      final firstAct = firstActLine.isNotEmpty
+          ? firstActLine.replaceFirst('First Activity:', '').trim()
+          : '';
+
+      final isShort = lower.contains('short mode') || contextContext.contains('Duration Mode: short');
+      final isDetailed = lower.contains('detailed mode') || contextContext.contains('Duration Mode: detailed');
+
+      String content;
+      if (priorities.isEmpty && firstAct.isEmpty) {
+        content = "Good morning. Your schedule is clear today. Take this opportunity to make progress on your personal goals or plan ahead.";
+      } else if (isShort) {
+        final top = priorities.isNotEmpty ? priorities.first : 'your primary focus';
+        final act = firstAct.isNotEmpty ? ' Starting with $firstAct.' : '';
+        content = "Good morning. Your top priority today is $top.$act";
+      } else if (isDetailed) {
+        final prioList = priorities.isNotEmpty
+            ? "Your priorities today are: ${priorities.join(', ')}."
+            : "No urgent tasks are on your backlog.";
+        final actPart = firstAct.isNotEmpty ? " First scheduled activity: $firstAct." : "";
+        content = "Good morning. $prioList$actPart Plan your deep focus sessions early and protect your energy for high-impact deliverables.";
+      } else {
+        final pCount = priorities.length;
+        final pText = pCount > 0
+            ? "You have $pCount priority ${pCount == 1 ? 'task' : 'tasks'} today: ${priorities.join(', ')}."
+            : "Your priority queue is clear.";
+        final actPart = firstAct.isNotEmpty ? " Your first activity is $firstAct." : "";
+        content = "Good morning. $pText$actPart Have a productive day!";
+      }
+
+      return AIMessage(
+        id: _uuid.v4(),
+        role: AIMessageRole.assistant,
+        content: content,
+        createdAt: DateTime.now(),
+      );
+    }
+
+    // -------------------------------------------------------------
+    // 0b. Daily Debrief / Nightly Reflection
+    // -------------------------------------------------------------
+    if (lower.contains('daily debrief') ||
+        lower.contains('nightly productivity reflection') ||
+        lower.contains('nightly reflection')) {
+      final wentWellLine = lines.firstWhere(
+        (l) => l.contains('User Answer - What went well:'),
+        orElse: () => '',
+      );
+      final improveLine = lines.firstWhere(
+        (l) => l.contains('User Answer - What to improve:'),
+        orElse: () => '',
+      );
+
+      final cleanWentWell = wentWellLine.isNotEmpty
+          ? wentWellLine
+              .replaceAll(RegExp(r'.*User Answer - What went well:\s*"?'), '')
+              .replaceAll(RegExp(r'"?\s*$'), '')
+              .trim()
+          : 'achieving your daily targets';
+      final cleanImprove = improveLine.isNotEmpty
+          ? improveLine
+              .replaceAll(RegExp(r'.*User Answer - What to improve:\s*"?'), '')
+              .replaceAll(RegExp(r'"?\s*$'), '')
+              .trim()
+          : 'refining your daily focus flow';
+
+      final content = "Today you made solid progress: $cleanWentWell. "
+          "You noted that $cleanImprove was your primary area for adjustment. "
+          "Tomorrow, protect your peak morning hours to tackle high-leverage work with minimal interruptions.";
+
+      return AIMessage(
+        id: _uuid.v4(),
+        role: AIMessageRole.assistant,
+        content: content,
+        createdAt: DateTime.now(),
+      );
+    }
+
+    // -------------------------------------------------------------
     // 1. "Plan my day" / "Help me organize today"
     // -------------------------------------------------------------
     if (lower.contains('plan my day') || lower.contains('organize today') || lower.contains('plan today')) {
@@ -198,7 +291,40 @@ class DynamicContextAIProvider implements AIProvider {
     }
 
     // -------------------------------------------------------------
-    // 7. General Intelligent Productivity Query
+    // 7. "Explain insights" / "What does this data mean" / "What should I do differently"
+    // -------------------------------------------------------------
+    if (lower.contains('insight') || lower.contains('what does this mean') || lower.contains('what should i do differently') || lower.contains('analytics mean')) {
+      final insightLines = lines
+          .where((l) => l.trim().startsWith('- [') && l.contains(']'))
+          .map((l) => l.trim().substring(2))
+          .toList();
+
+      final buffer = StringBuffer();
+      buffer.writeln("🧠 **Your Intelligent Productivity Breakdown**:\n");
+
+      if (insightLines.isNotEmpty) {
+        buffer.writeln("**What your data means**:");
+        for (final line in insightLines.take(3)) {
+          buffer.writeln("• $line");
+        }
+        buffer.writeln("\n**What you should do differently**:");
+        buffer.writeln("• Align your most challenging milestone with your strongest cognitive peak window.");
+        buffer.writeln("• If you notice repeatedly postponed tasks, split them into smaller 20-minute sub-steps.");
+        buffer.writeln("• Lock in your top priorities the night before to reduce morning decision friction.");
+      } else {
+        buffer.writeln("Timora is currently observing your daily tasks and focus sessions. As you complete more activities, real statistical insights will appear here outlining your peak focus hours, routine consistency score, and schedule effectiveness.");
+      }
+
+      return AIMessage(
+        id: _uuid.v4(),
+        role: AIMessageRole.assistant,
+        content: buffer.toString(),
+        createdAt: DateTime.now(),
+      );
+    }
+
+    // -------------------------------------------------------------
+    // 8. General Intelligent Productivity Query
     // -------------------------------------------------------------
     final contextHint = pendingTasks.isNotEmpty
         ? "You currently have ${pendingTasks.length} pending tasks (starting with '${pendingTasks.first}')."

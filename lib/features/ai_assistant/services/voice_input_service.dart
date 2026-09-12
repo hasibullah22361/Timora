@@ -1,14 +1,37 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../quick_add/services/quick_add_parser.dart';
 import '../../tasks/data/models/task_model.dart';
+import '../../tasks/data/repositories/task_repository.dart';
 import '../../tasks/presentation/providers/task_provider.dart';
 import '../../schedule/data/models/schedule_activity.dart';
 import '../../schedule/data/repositories/schedule_repository.dart';
 import '../../schedule/presentation/providers/schedule_provider.dart';
+import '../../diary/data/models/diary_entry_model.dart';
+import '../../diary/data/repositories/diary_repository.dart';
+import '../../diary/presentation/providers/diary_provider.dart';
 import '../../home/presentation/providers/home_provider.dart';
 import '../../notifications/application/voice_announcement_service.dart';
+import '../domain/models/voice_note_models.dart';
+import 'voice_note_ai_service.dart';
 import '../services/ai_service.dart';
+
+class VoiceNoteExecutionSummary {
+  final DiaryEntryModel? createdDiaryEntry;
+  final List<TaskModel> createdTasks;
+  final List<ScheduleActivity> createdActivities;
+  final String message;
+  final bool isDuplicate;
+
+  VoiceNoteExecutionSummary({
+    this.createdDiaryEntry,
+    this.createdTasks = const [],
+    this.createdActivities = const [],
+    required this.message,
+    this.isDuplicate = false,
+  });
+}
 
 enum VoiceInputState {
   idle,
@@ -208,7 +231,9 @@ class VoiceInputService {
           : 'You have no scheduled activities remaining today.';
     } else {
       final active = activities
-          .where((a) => a.status != ActivityStatus.skipped)
+          .where((a) =>
+              a.status != ActivityStatus.skipped &&
+              a.status != ActivityStatus.replaced)
           .take(4)
           .map((a) => a.title)
           .join(', ');
@@ -562,5 +587,247 @@ class VoiceInputService {
       return 'Tomorrow';
     }
     return '${dt.month}/${dt.day}';
+  }
+
+  /// Processes natural language voice note into Diary reflections and Actionable Tasks.
+  Future<VoiceNoteExtractionResult> processVoiceNote(
+    String transcript, {
+    DateTime? referenceDate,
+  }) async {
+    final aiService = _ref.read(voiceNoteAIServiceProvider);
+    return await aiService.processVoiceNote(
+      transcript,
+      referenceDate: referenceDate,
+    );
+  }
+
+  /// Finds the earliest conflict-free slot on the given [date] for the specified [duration].
+  Future<DateTimeRange?> findConflictFreeSlot({
+    required DateTime date,
+    required Duration duration,
+    DateTime? preferredStart,
+    int startHour = 9,
+    int endHour = 22,
+  }) async {
+    final repo = _ref.read(scheduleRepositoryProvider);
+    final targetDate = DateTime(date.year, date.month, date.day);
+    final allActivities = await repo.getActivitiesForDate(targetDate);
+    final active = allActivities
+        .where((a) =>
+            a.status != ActivityStatus.completed &&
+            a.status != ActivityStatus.skipped &&
+            a.status != ActivityStatus.replaced)
+        .toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    // 1. If preferredStart is given, check if that exact slot is free
+    if (preferredStart != null) {
+      final candidateEnd = preferredStart.add(duration);
+      bool overlaps = false;
+      for (final act in active) {
+        if (preferredStart.isBefore(act.endTime) && candidateEnd.isAfter(act.startTime)) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (!overlaps) {
+        return DateTimeRange(start: preferredStart, end: candidateEnd);
+      }
+    }
+
+    // 2. Otherwise search for an open slot within daytime hours
+    DateTime candidate = preferredStart ?? DateTime(targetDate.year, targetDate.month, targetDate.day, startHour, 0);
+    final endLimit = DateTime(targetDate.year, targetDate.month, targetDate.day, endHour, 0);
+
+    final now = DateTime.now();
+    if (targetDate.year == now.year && targetDate.month == now.month && targetDate.day == now.day) {
+      if (candidate.isBefore(now)) {
+        final remainder = now.minute % 5;
+        final minutesToAdd = (remainder == 0 ? 5 : (5 - remainder)) + 5;
+        candidate = now
+            .add(Duration(minutes: minutesToAdd))
+            .subtract(Duration(seconds: now.second, milliseconds: now.millisecond));
+      }
+    }
+
+    while (candidate.add(duration).isBefore(endLimit) || candidate.add(duration).isAtSameMomentAs(endLimit)) {
+      final candidateEnd = candidate.add(duration);
+      bool hasOverlap = false;
+
+      for (final act in active) {
+        if (candidate.isBefore(act.endTime) && candidateEnd.isAfter(act.startTime)) {
+          hasOverlap = true;
+          candidate = act.endTime.add(const Duration(minutes: 5));
+          break;
+        }
+      }
+
+      if (!hasOverlap) {
+        return DateTimeRange(start: candidate, end: candidateEnd);
+      }
+    }
+
+    return null;
+  }
+
+  /// Executes user-confirmed actions from a voice note:
+  /// creates Diary entry (if enabled), creates Tasks, and optionally schedules them.
+  Future<VoiceNoteExecutionSummary> executeVoiceNoteActions({
+    required VoiceNoteExtractionResult result,
+    bool saveDiary = true,
+    bool shouldSchedule = false,
+    List<ExtractedVoiceTask>? selectedTasks,
+  }) async {
+    final aiService = _ref.read(voiceNoteAIServiceProvider);
+
+    // Guard against duplicate processing
+    if (aiService.isAlreadyProcessed(result.signature)) {
+      return VoiceNoteExecutionSummary(
+        message: 'This voice note was already processed.',
+        isDuplicate: true,
+      );
+    }
+
+    DiaryEntryModel? createdDiary;
+    final createdTasks = <TaskModel>[];
+    final createdActivities = <ScheduleActivity>[];
+    final now = DateTime.now();
+
+    // 1. Create Diary Entry if requested and available
+    if (saveDiary && result.hasDiary) {
+      final diaryRepo = _ref.read(diaryRepositoryProvider);
+      final todayNormalized = DateTime(now.year, now.month, now.day);
+      final existingEntries = await diaryRepo.getEntriesForDate(todayNormalized);
+      final existingExact = existingEntries.where(
+        (e) => e.content.trim() == result.diaryContent!.trim(),
+      ).firstOrNull;
+
+      if (existingExact != null) {
+        createdDiary = existingExact;
+      } else {
+        final diaryId = const Uuid().v4();
+        createdDiary = DiaryEntryModel(
+          id: diaryId,
+          date: todayNormalized,
+          title: result.diaryTitle ?? 'Voice Reflection',
+          content: result.diaryContent!,
+          moodKey: result.diaryMoodKey,
+          mood: (result.diaryMoodKey == 'happy' || result.diaryMoodKey == 'excited') ? 4 : 3,
+          tags: const ['voice-note'],
+          createdAt: now,
+        );
+
+        await _ref.read(diaryNotifierProvider.notifier).saveEntry(createdDiary);
+      }
+    }
+
+    // 2. Process tasks
+    final tasksToCreate = selectedTasks ?? result.tasks.where((t) => t.isSelected).toList();
+    final taskRepo = _ref.read(taskRepositoryProvider);
+    final existingTasks = await taskRepo.getTasks();
+
+    for (final extracted in tasksToCreate) {
+      final isTaskDuplicate = existingTasks.any((t) =>
+        t.status != TaskStatus.completed &&
+        t.status != TaskStatus.cancelled &&
+        t.title.trim().toLowerCase() == extracted.title.trim().toLowerCase() &&
+        t.dueDate?.year == extracted.dueDate?.year &&
+        t.dueDate?.month == extracted.dueDate?.month &&
+        t.dueDate?.day == extracted.dueDate?.day,
+      );
+
+      if (isTaskDuplicate) {
+        continue;
+      }
+
+      String? scheduledActivityId;
+
+      if (shouldSchedule) {
+        final targetDate = extracted.dueDate ?? DateTime(now.year, now.month, now.day);
+        final duration = Duration(
+          minutes: extracted.estimatedDurationMinutes > 0 ? extracted.estimatedDurationMinutes : 30,
+        );
+
+        DateTime? preferredStart;
+        if (extracted.startTime != null) {
+          preferredStart = DateTime(
+            targetDate.year,
+            targetDate.month,
+            targetDate.day,
+            extracted.startTime!.hour,
+            extracted.startTime!.minute,
+          );
+        } else if (extracted.dueTime != null) {
+          preferredStart = DateTime(
+            targetDate.year,
+            targetDate.month,
+            targetDate.day,
+            extracted.dueTime!.hour,
+            extracted.dueTime!.minute,
+          );
+        }
+
+        final slot = await findConflictFreeSlot(
+          date: targetDate,
+          duration: duration,
+          preferredStart: preferredStart,
+        );
+
+        if (slot != null) {
+          final actId = const Uuid().v4();
+          final activity = ScheduleActivity(
+            id: actId,
+            title: extracted.title,
+            date: targetDate,
+            startTime: slot.start,
+            endTime: slot.end,
+            category: extracted.category,
+            icon: '🎙️',
+            status: ActivityStatus.upcoming,
+            isOverridden: true,
+            createdAt: now,
+          );
+
+          try {
+            await _ref.read(scheduleNotifierProvider).addActivity(activity);
+            createdActivities.add(activity);
+            scheduledActivityId = actId;
+            extracted.startTime = TimeOfDay(hour: slot.start.hour, minute: slot.start.minute);
+            extracted.endTime = TimeOfDay(hour: slot.end.hour, minute: slot.end.minute);
+          } catch (e) {
+            debugPrint('[QuickVoiceNote] Schedule activity insertion skipped: $e');
+          }
+        }
+      }
+
+      final taskModel = extracted.toTaskModel(scheduleActivityId: scheduledActivityId);
+      await _ref.read(taskNotifierProvider).createTask(taskModel);
+      createdTasks.add(taskModel);
+    }
+
+    // Mark as processed to prevent accidental duplicate clicks
+    aiService.markProcessed(result.signature);
+
+    final summaryParts = <String>[];
+    if (createdDiary != null) {
+      summaryParts.add('Saved Diary entry');
+    }
+    if (createdTasks.isNotEmpty) {
+      summaryParts.add('created ${createdTasks.length} task${createdTasks.length == 1 ? '' : 's'}');
+    }
+    if (createdActivities.isNotEmpty) {
+      summaryParts.add('scheduled ${createdActivities.length} session${createdActivities.length == 1 ? '' : 's'}');
+    }
+
+    final message = summaryParts.isNotEmpty
+        ? '✨ ${summaryParts.join(' & ')}.'
+        : '✨ Voice note processed.';
+
+    return VoiceNoteExecutionSummary(
+      createdDiaryEntry: createdDiary,
+      createdTasks: createdTasks,
+      createdActivities: createdActivities,
+      message: message,
+    );
   }
 }

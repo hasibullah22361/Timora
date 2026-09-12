@@ -73,6 +73,21 @@ class ProductivityEventService {
     ));
   }
 
+  Future<void> logTaskMissed(TaskModel task) async {
+    await _repo.recordEvent(ProductivityEventModel(
+      eventType: ProductivityEventType.taskMissed,
+      entityType: 'task',
+      entityId: task.id,
+      metadata: {
+        'title': task.title,
+        'priority': task.priority.name,
+        'category': task.category,
+        'dueDate': task.dueDate?.toIso8601String(),
+        'reason': 'Task deadline passed without completion.',
+      },
+    ));
+  }
+
   Future<void> logTaskRecovered(String taskId, String title, DateTime newSlot) async {
     await _repo.recordEvent(ProductivityEventModel(
       eventType: ProductivityEventType.taskRecovered,

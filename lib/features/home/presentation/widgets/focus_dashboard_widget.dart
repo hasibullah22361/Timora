@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../focus/presentation/screens/focus_screen.dart';
+import '../../../focus/presentation/screens/focus_history_screen.dart';
 import '../../../ambient_sound/presentation/screens/ambient_sounds_screen.dart';
-import '../../../analytics/presentation/screens/analytics_screen.dart';
 
 class FocusDashboardWidget extends ConsumerWidget {
   const FocusDashboardWidget({super.key});
@@ -29,9 +29,9 @@ class FocusDashboardWidget extends ConsumerWidget {
             Expanded(
               child: _buildToolCard(
                 context: context,
-                title: 'Deep Focus',
-                subtitle: '25 min',
-                icon: Icons.spa_rounded,
+                title: 'Focus State',
+                subtitle: 'Active / Deep',
+                icon: Icons.play_circle_outline_rounded,
                 iconColor: const Color(0xFF22C55E),
                 onTap: () {
                   Navigator.push(
@@ -46,7 +46,7 @@ class FocusDashboardWidget extends ConsumerWidget {
               child: _buildToolCard(
                 context: context,
                 title: 'Pomodoro',
-                subtitle: '25 / 5',
+                subtitle: '25 / 5 min',
                 icon: Icons.timer_outlined,
                 iconColor: const Color(0xFFA855F7),
                 onTap: () {
@@ -61,14 +61,14 @@ class FocusDashboardWidget extends ConsumerWidget {
             Expanded(
               child: _buildToolCard(
                 context: context,
-                title: 'Focus Music',
-                subtitle: 'Soundscapes',
-                icon: Icons.music_note_rounded,
-                iconColor: const Color(0xFF06B6D4),
+                title: 'Focus History',
+                subtitle: 'Logs & Stats',
+                icon: Icons.history_rounded,
+                iconColor: const Color(0xFFF97316),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AmbientSoundsScreen()),
+                    MaterialPageRoute(builder: (_) => const FocusHistoryScreen()),
                   );
                 },
               ),
@@ -77,14 +77,14 @@ class FocusDashboardWidget extends ConsumerWidget {
             Expanded(
               child: _buildToolCard(
                 context: context,
-                title: 'Statistics',
-                subtitle: 'Analytics',
-                icon: Icons.bar_chart_rounded,
-                iconColor: const Color(0xFFF97316),
+                title: 'Focus Music',
+                subtitle: 'Ambient',
+                icon: Icons.headphones_outlined,
+                iconColor: const Color(0xFF06B6D4),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AnalyticsScreen()),
+                    MaterialPageRoute(builder: (_) => const AmbientSoundsScreen()),
                   );
                 },
               ),
@@ -164,5 +164,3 @@ class FocusDashboardWidget extends ConsumerWidget {
     );
   }
 }
-
-

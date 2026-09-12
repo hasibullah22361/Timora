@@ -75,6 +75,10 @@ class TaskRepository {
     return _tasks.where((t) => !t.isDeleted).toList();
   }
 
+  Future<List<TaskModel>> getPendingTasks() async {
+    return _tasks.where((t) => !t.isDeleted && !t.isCompleted && t.status != TaskStatus.cancelled).toList();
+  }
+
   Future<TaskModel?> getTask(String id) async {
     try {
       return _tasks.firstWhere((t) => t.id == id && !t.isDeleted);

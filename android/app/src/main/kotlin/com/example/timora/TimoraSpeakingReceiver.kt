@@ -90,12 +90,61 @@ class TimoraSpeakingReceiver : BroadcastReceiver() {
         eventsPrefs.edit().remove("evt_$alarmIdStr").apply()
         legacyPrefs.edit().remove("timora_alarm_$alarmIdStr").apply()
 
-        val voiceGender = flutterPrefs.getString("flutter.notificationVoiceGender", null)
-            ?: eventsPrefs.getString("voiceGender", "female") ?: "female"
-        val speed = flutterPrefs.getFloat("flutter.speakingSpeed", 1.0f).takeIf { it > 0 }
-            ?: eventsPrefs.getFloat("speakingSpeed", 1.0f)
+        val voiceGender = try {
+            flutterPrefs.getString("flutter.notificationVoiceGender", null)
+                ?: eventsPrefs.getString("voiceGender", "female") ?: "female"
+        } catch (e: Exception) {
+            eventsPrefs.getString("voiceGender", "female") ?: "female"
+        }
 
-        Log.d(TAG, "[TimoraAlarm] Event: ID=$alarmIdStr type=$eventType title=\"$title\" speakEnabled=$speakEnabled voiceGender=$voiceGender speed=$speed")
+        var speed = 1.0f
+        try {
+            if (eventsPrefs.contains("speakingSpeed")) {
+                speed = eventsPrefs.getFloat("speakingSpeed", 1.0f)
+            } else if (flutterPrefs.contains("flutter.speakingSpeed")) {
+                val rawVal = flutterPrefs.all["flutter.speakingSpeed"]
+                speed = when (rawVal) {
+                    is Number -> rawVal.toFloat()
+                    is String -> {
+                        val doublePrefix = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBEb3VibGUu"
+                        val clean = if (rawVal.startsWith(doublePrefix)) {
+                            rawVal.substring(doublePrefix.length)
+                        } else rawVal
+                        clean.toFloatOrNull() ?: 1.0f
+                    }
+                    else -> 1.0f
+                }
+            }
+        } catch (e: Exception) {
+            speed = 1.0f
+        }
+        if (speed <= 0f) speed = 1.0f
+
+        var volume = 1.0f
+        try {
+            if (eventsPrefs.contains("speakingVolume")) {
+                volume = eventsPrefs.getFloat("speakingVolume", 1.0f)
+            } else if (flutterPrefs.contains("flutter.speakingNotificationVolume")) {
+                val rawVal = flutterPrefs.all["flutter.speakingNotificationVolume"]
+                volume = when (rawVal) {
+                    is Number -> rawVal.toFloat()
+                    is String -> {
+                        val doublePrefix = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBEb3VibGUu"
+                        val clean = if (rawVal.startsWith(doublePrefix)) {
+                            rawVal.substring(doublePrefix.length)
+                        } else rawVal
+                        clean.toFloatOrNull() ?: 1.0f
+                    }
+                    else -> 1.0f
+                }
+            }
+        } catch (e: Exception) {
+            volume = 1.0f
+        }
+        if (volume < 0f) volume = 0f
+        if (volume > 1f) volume = 1f
+
+        Log.d(TAG, "[TimoraAlarm] Event: ID=$alarmIdStr type=$eventType title=\"$title\" speakEnabled=$speakEnabled voiceGender=$voiceGender speed=$speed volume=$volume")
 
         // Start Foreground Speaking Service
         val serviceIntent = Intent(context, TimoraSpeakingService::class.java).apply {
@@ -107,6 +156,7 @@ class TimoraSpeakingReceiver : BroadcastReceiver() {
             putExtra(TimoraSpeakingService.EXTRA_SPEAK_ENABLED, speakEnabled)
             putExtra(TimoraSpeakingService.EXTRA_VOICE_GENDER, voiceGender)
             putExtra(TimoraSpeakingService.EXTRA_SPEAK_SPEED, speed)
+            putExtra(TimoraSpeakingService.EXTRA_SPEAK_VOLUME, volume)
         }
 
         try {
@@ -124,6 +174,6 @@ class TimoraSpeakingReceiver : BroadcastReceiver() {
                 transitionWakeLock?.release()
                 Log.d(TAG, "[TimoraAlarm] Transition WakeLock released early")
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
     }
 }

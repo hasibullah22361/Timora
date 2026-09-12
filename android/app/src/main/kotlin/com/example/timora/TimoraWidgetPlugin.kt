@@ -33,6 +33,9 @@ class TimoraWidgetPlugin(private val context: Context) : MethodChannel.MethodCal
                 TimoraWidgetProvider.ACTION_START_FOCUS -> {
                     payload["action"] = "start_focus"
                 }
+                TimoraWidgetProvider.ACTION_OPEN_NOTIFICATIONS -> {
+                    payload["action"] = "open_notifications"
+                }
                 else -> return
             }
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ActivityStatus { upcoming, current, completed, skipped }
+enum ActivityStatus { upcoming, current, completed, skipped, replaced }
 
 class ScheduleActivity {
   final String id;
@@ -21,6 +21,12 @@ class ScheduleActivity {
   final DateTime? updatedAt;
   final DateTime? completedAt;
 
+  // Activity replacement fields
+  final String? replacedByActivityId;
+  final String? replacementActivityTitle;
+  final String? replacesActivityId;
+  final String? originalActivityTitle;
+
   ScheduleActivity({
     required this.id,
     required this.title,
@@ -39,9 +45,14 @@ class ScheduleActivity {
     required this.createdAt,
     this.updatedAt,
     this.completedAt,
+    this.replacedByActivityId,
+    this.replacementActivityTitle,
+    this.replacesActivityId,
+    this.originalActivityTitle,
   });
 
   ScheduleActivity copyWith({
+    String? id,
     String? title,
     String? description,
     DateTime? date,
@@ -57,9 +68,13 @@ class ScheduleActivity {
     bool? isOverridden,
     DateTime? updatedAt,
     DateTime? completedAt,
+    String? replacedByActivityId,
+    String? replacementActivityTitle,
+    String? replacesActivityId,
+    String? originalActivityTitle,
   }) {
     return ScheduleActivity(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
       date: date ?? this.date,
@@ -76,6 +91,10 @@ class ScheduleActivity {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: completedAt ?? this.completedAt,
+      replacedByActivityId: replacedByActivityId ?? this.replacedByActivityId,
+      replacementActivityTitle: replacementActivityTitle ?? this.replacementActivityTitle,
+      replacesActivityId: replacesActivityId ?? this.replacesActivityId,
+      originalActivityTitle: originalActivityTitle ?? this.originalActivityTitle,
     );
   }
 
@@ -98,6 +117,10 @@ class ScheduleActivity {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'completedAt': completedAt?.toIso8601String(),
+      'replacedByActivityId': replacedByActivityId,
+      'replacementActivityTitle': replacementActivityTitle,
+      'replacesActivityId': replacesActivityId,
+      'originalActivityTitle': originalActivityTitle,
     };
   }
 
@@ -140,6 +163,10 @@ class ScheduleActivity {
       createdAt: createdRaw != null ? (DateTime.tryParse(createdRaw.toString()) ?? now) : now,
       updatedAt: updatedRaw != null ? DateTime.tryParse(updatedRaw.toString()) : null,
       completedAt: completedRaw != null ? DateTime.tryParse(completedRaw.toString()) : null,
+      replacedByActivityId: (json['replacedByActivityId'] ?? json['replaced_by_activity_id']) as String?,
+      replacementActivityTitle: (json['replacementActivityTitle'] ?? json['replacement_activity_title']) as String?,
+      replacesActivityId: (json['replacesActivityId'] ?? json['replaces_activity_id']) as String?,
+      originalActivityTitle: (json['originalActivityTitle'] ?? json['original_activity_title']) as String?,
     );
   }
 }

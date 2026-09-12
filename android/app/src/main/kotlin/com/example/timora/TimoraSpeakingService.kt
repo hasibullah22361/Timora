@@ -41,6 +41,8 @@ class TimoraSpeakingService : Service() {
         const val TAG = "TimoraSpeakingService"
         const val CHANNEL_ID = "timora_voice_v2"
         const val CHANNEL_NAME = "Timora Voice Alerts"
+        const val AUDIBLE_CHANNEL_ID = "timora_routine"
+        const val AUDIBLE_CHANNEL_NAME = "Timora Reminders"
         const val FG_NOTIFICATION_ID = 88881
 
         const val EXTRA_ALARM_ID = "alarm_id"
@@ -51,6 +53,7 @@ class TimoraSpeakingService : Service() {
         const val EXTRA_SPEAK_ENABLED = "speak_enabled"
         const val EXTRA_VOICE_GENDER = "voice_gender"
         const val EXTRA_SPEAK_SPEED = "speak_speed"
+        const val EXTRA_SPEAK_VOLUME = "speak_volume"
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
@@ -66,6 +69,8 @@ class TimoraSpeakingService : Service() {
     private var currentSpeakText: String = ""
     private var currentVoiceGender: String = "female"
     private var currentSpeakSpeed: Float = 1.0f
+    private var currentSpeakVolume: Float = 1.0f
+    private var currentEventType: String = "activityStart"
 
     private val safetyTimeoutRunnable = Runnable {
         Log.w(TAG, "[TimoraTTS] Safety timeout reached (25s) — forcing service shutdown")
@@ -88,8 +93,10 @@ class TimoraSpeakingService : Service() {
         val speakEnabled = intent?.getBooleanExtra(EXTRA_SPEAK_ENABLED, true) ?: true
         currentVoiceGender = intent?.getStringExtra(EXTRA_VOICE_GENDER) ?: "female"
         currentSpeakSpeed = intent?.getFloatExtra(EXTRA_SPEAK_SPEED, 1.0f) ?: 1.0f
+        currentSpeakVolume = intent?.getFloatExtra(EXTRA_SPEAK_VOLUME, 1.0f) ?: 1.0f
+        currentEventType = intent?.getStringExtra(EXTRA_EVENT_TYPE) ?: "activityStart"
 
-        Log.d(TAG, "[TimoraAlarm] Service started: id=$currentAlarmId title=\"$currentTitle\" speakEnabled=$speakEnabled voiceGender=$currentVoiceGender speed=$currentSpeakSpeed")
+        Log.d(TAG, "[TimoraAlarm] Service started: id=$currentAlarmId title=\"$currentTitle\" speakEnabled=$speakEnabled voiceGender=$currentVoiceGender speed=$currentSpeakSpeed volume=$currentSpeakVolume")
 
         // 1. Acquire WakeLock immediately to prevent device sleeping during TTS init
         acquireWakeLock()
@@ -109,10 +116,10 @@ class TimoraSpeakingService : Service() {
         // Arm safety timeout (25 seconds max duration)
         mainHandler.postDelayed(safetyTimeoutRunnable, 25_000L)
 
-        // 3. If speech is disabled or text is blank, post the visible notification and exit
+        // 3. If speech is disabled or text is blank, post the audible notification and exit
         if (!speakEnabled || currentSpeakText.isBlank()) {
-            Log.d(TAG, "[TimoraTTS] Speech skipped (enabled=$speakEnabled, textLen=${currentSpeakText.length})")
-            postVisibleNotificationAndExit()
+            Log.d(TAG, "[TimoraTTS] Speech disabled or blank (enabled=$speakEnabled) — posting audible notification")
+            postVisibleNotificationAndExit(isAudible = true)
             return START_NOT_STICKY
         }
 
@@ -188,7 +195,7 @@ class TimoraSpeakingService : Service() {
         try {
             ttsEngine?.stop()
             ttsEngine?.shutdown()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
         ttsEngine = null
 
         try {
@@ -227,7 +234,7 @@ class TimoraSpeakingService : Service() {
                             .build()
                         tts.setAudioAttributes(audioAttributes)
 
-                        val pitch = if (isMale) 0.90f else 1.05f
+                        val pitch = if (isMale) 0.82f else 1.05f
                         tts.setPitch(pitch)
 
                         val baseRate = if (isMale) 0.86f else 0.88f
@@ -256,7 +263,10 @@ class TimoraSpeakingService : Service() {
                         })
 
                         val utteranceId = "timora_utterance_$alarmId"
-                        val result = tts.speak(speakText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                        val ttsParams = android.os.Bundle().apply {
+                            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, currentSpeakVolume.coerceIn(0f, 1f))
+                        }
+                        val result = tts.speak(speakText, TextToSpeech.QUEUE_FLUSH, ttsParams, utteranceId)
                         if (result == TextToSpeech.ERROR) {
                             Log.e(TAG, "[TimoraTTS] ERROR: speak() returned TextToSpeech.ERROR")
                             postVisibleNotificationAndExit()
@@ -272,6 +282,7 @@ class TimoraSpeakingService : Service() {
                 Log.e(TAG, "[TimoraTTS] ERROR: TTS initialization failed with status=$status")
                 postVisibleNotificationAndExit()
             }
+        }
         } catch (e: Exception) {
             Log.e(TAG, "[TimoraTTS] Error instantiating TextToSpeech: ${e.message}")
             postVisibleNotificationAndExit()
@@ -282,39 +293,102 @@ class TimoraSpeakingService : Service() {
         val englishVoices = voices.filter { it.locale.language == "en" }
         if (englishVoices.isEmpty()) return null
 
-        val targetKeyword = if (isMale) "male" else "female"
-        val avoidKeyword = if (isMale) "female" else "male"
-
-        // 1. High quality local voice with specific gender keyword
-        val bestMatch = englishVoices.firstOrNull { voice ->
+        fun hasMaleMarker(voice: Voice): Boolean {
             val nameLower = voice.name.lowercase()
             val features = voice.features?.map { it.lowercase() } ?: emptyList()
-            val hasGender = nameLower.contains(targetKeyword) || features.any { it.contains(targetKeyword) }
-            val notAvoid = !nameLower.contains(avoidKeyword) || (isMale && !nameLower.contains("female"))
-            hasGender && notAvoid && !voice.isNetworkConnectionRequired
+            if (nameLower.contains("female") || features.any { it.contains("female") }) return false
+            return nameLower.contains("male") ||
+                    nameLower.contains("#m") ||
+                    nameLower.contains("-m-") ||
+                    nameLower.contains("_m_") ||
+                    nameLower.contains("smtm") ||
+                    nameLower.contains("tpd") ||
+                    nameLower.contains("tpc") ||
+                    nameLower.contains("tpb") ||
+                    nameLower.contains("iol") ||
+                    nameLower.contains("iob") ||
+                    nameLower.contains("iog") ||
+                    nameLower.contains("iod") ||
+                    nameLower.contains("rjs") ||
+                    nameLower.contains("afh") ||
+                    nameLower.contains("cxx") ||
+                    nameLower.contains("guy") ||
+                    nameLower.contains("davis") ||
+                    nameLower.contains("jason") ||
+                    nameLower.contains("tony") ||
+                    nameLower.contains("george") ||
+                    nameLower.contains("david") ||
+                    nameLower.contains("james") ||
+                    nameLower.contains("john") ||
+                    nameLower.contains("richard") ||
+                    features.any { it.contains("male") && !it.contains("female") }
         }
-        if (bestMatch != null) return bestMatch
 
-        // 2. Any voice matching gender keyword
-        val anyGenderMatch = englishVoices.firstOrNull { voice ->
+        fun hasFemaleMarker(voice: Voice): Boolean {
             val nameLower = voice.name.lowercase()
-            nameLower.contains(targetKeyword) || (voice.features?.any { it.lowercase().contains(targetKeyword) } == true)
+            val features = voice.features?.map { it.lowercase() } ?: emptyList()
+            return nameLower.contains("female") ||
+                    nameLower.contains("#f") ||
+                    nameLower.contains("-f-") ||
+                    nameLower.contains("_f_") ||
+                    nameLower.contains("smtf") ||
+                    nameLower.contains("tpf") ||
+                    nameLower.contains("iom") ||
+                    nameLower.contains("gkb") ||
+                    nameLower.contains("jenny") ||
+                    nameLower.contains("aria") ||
+                    nameLower.contains("samantha") ||
+                    nameLower.contains("zira") ||
+                    features.any { it.contains("female") }
         }
-        if (anyGenderMatch != null) return anyGenderMatch
 
-        // 3. Fallback to en-US local voice
-        return englishVoices.firstOrNull { it.locale.country == "US" && !it.isNetworkConnectionRequired }
-            ?: englishVoices.firstOrNull()
+        if (isMale) {
+            // 1. High quality local English voice with male markers
+            val bestLocalMatch = englishVoices.firstOrNull { voice ->
+                hasMaleMarker(voice) && !voice.isNetworkConnectionRequired
+            }
+            if (bestLocalMatch != null) return bestLocalMatch
+
+            // 2. Any English voice with male markers (network voices)
+            val anyMaleMatch = englishVoices.firstOrNull { voice ->
+                hasMaleMarker(voice)
+            }
+            if (anyMaleMatch != null) return anyMaleMatch
+
+            // 3. Any English voice that does NOT have female markers
+            val nonFemaleMatch = englishVoices.firstOrNull { voice ->
+                !hasFemaleMarker(voice) && !voice.isNetworkConnectionRequired
+            } ?: englishVoices.firstOrNull { voice -> !hasFemaleMarker(voice) }
+            if (nonFemaleMatch != null) return nonFemaleMatch
+
+            // 4. If only female voices exist, do NOT select a female voice.
+            // Returning null allows pitch 0.82f to synthesize a masculine voice.
+            return null
+        } else {
+            // Female selection
+            val bestLocalFemale = englishVoices.firstOrNull { voice ->
+                hasFemaleMarker(voice) && !voice.isNetworkConnectionRequired
+            }
+            if (bestLocalFemale != null) return bestLocalFemale
+
+            val anyFemale = englishVoices.firstOrNull { voice ->
+                hasFemaleMarker(voice)
+            }
+            if (anyFemale != null) return anyFemale
+
+            return englishVoices.firstOrNull { it.locale.country == "US" && !it.isNetworkConnectionRequired }
+                ?: englishVoices.firstOrNull()
+        }
     }
 
 
-    private fun postVisibleNotificationAndExit() {
+    private fun postVisibleNotificationAndExit(isAudible: Boolean = false) {
         // Post persistent visible notification in the Android notification drawer
         try {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val visibleNotif = createNotification(currentTitle, currentBody, isOngoing = false)
+            val visibleNotif = createNotification(currentTitle, currentBody, isOngoing = false, isAudible = isAudible)
             nm.notify(currentAlarmId, visibleNotif)
-            Log.d(TAG, "[TimoraAlarm] Posted persistent visible notification id=$currentAlarmId")
+            Log.d(TAG, "[TimoraAlarm] Posted persistent notification id=$currentAlarmId (audible=$isAudible)")
         } catch (e: Exception) {
             Log.e(TAG, "[TimoraAlarm] Error posting visible notification: ${e.message}")
         }
@@ -325,7 +399,9 @@ class TimoraSpeakingService : Service() {
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val channel = NotificationChannel(
+
+            // Silent channel accompanying TTS speech
+            val silentChannel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
@@ -335,22 +411,49 @@ class TimoraSpeakingService : Service() {
                 enableVibration(false)    // Strictly NO vibration
                 enableLights(false)
             }
-            nm.createNotificationChannel(channel)
+            nm.createNotificationChannel(silentChannel)
+
+            // Audible channel for standard reminders when speech is disabled
+            val audibleChannel = NotificationChannel(
+                AUDIBLE_CHANNEL_ID,
+                AUDIBLE_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Audible reminders when spoken announcements are disabled"
+                enableVibration(true)
+                enableLights(true)
+            }
+            nm.createNotificationChannel(audibleChannel)
         }
     }
 
-    private fun createNotification(title: String, body: String, isOngoing: Boolean): Notification {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+    private fun createNotification(title: String, body: String, isOngoing: Boolean, isAudible: Boolean = false): Notification {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("notification_id", currentAlarmId)
+            putExtra("event_type", currentEventType)
+            if (currentEventType.contains("recap", ignoreCase = true) || currentEventType.contains("Recap")) {
+                val recapType = when {
+                    currentEventType.contains("weekly", ignoreCase = true) -> "weekly"
+                    currentEventType.contains("monthly", ignoreCase = true) -> "monthly"
+                    else -> "daily"
+                }
+                putExtra("notification_type", "recap")
+                putExtra("recap_type", recapType)
+                putExtra("payload", """{"type":"recap","recapType":"$recapType"}""")
+            }
+        }
         val pendingIntent = if (launchIntent != null) {
             PendingIntent.getActivity(
                 this,
-                0,
+                currentAlarmId,
                 launchIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         } else null
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val targetChannelId = if (isAudible) AUDIBLE_CHANNEL_ID else CHANNEL_ID
+        val builder = NotificationCompat.Builder(this, targetChannelId)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(body)
@@ -358,7 +461,12 @@ class TimoraSpeakingService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(isOngoing)
             .setAutoCancel(!isOngoing)
-            .setSilent(true) // Enforces silence — no chime or ringtone
+
+        if (isAudible) {
+            builder.setDefaults(Notification.DEFAULT_ALL)
+        } else {
+            builder.setSilent(true)
+        }
 
         if (pendingIntent != null) {
             builder.setContentIntent(pendingIntent)
@@ -391,7 +499,7 @@ class TimoraSpeakingService : Service() {
                 @Suppress("DEPRECATION")
                 audioManager?.abandonAudioFocus(null)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
 
         // 3. Release WakeLock
         try {
@@ -399,7 +507,7 @@ class TimoraSpeakingService : Service() {
                 wakeLock?.release()
                 Log.d(TAG, "[TimoraAlarm] WakeLock released")
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
 
         // 4. Remove temporary foreground notification and stop service
         try {
@@ -409,7 +517,7 @@ class TimoraSpeakingService : Service() {
                 @Suppress("DEPRECATION")
                 stopForeground(true)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
 
         stopSelf()
         Log.d(TAG, "[TimoraAlarm] Service finished and stopped")

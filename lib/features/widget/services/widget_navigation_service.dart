@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../tasks/presentation/screens/task_details_screen.dart';
 import '../../focus/presentation/screens/focus_screen.dart';
+import '../../notifications/presentation/screens/notifications_screen.dart';
 
 class WidgetNavigationService {
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -77,6 +78,14 @@ class WidgetNavigationService {
         Navigator.of(navContext).push(
           MaterialPageRoute(
             builder: (_) => const FocusScreen(),
+          ),
+        );
+        break;
+
+      case 'open_notifications':
+        Navigator.of(navContext).push(
+          MaterialPageRoute(
+            builder: (_) => const NotificationsScreen(),
           ),
         );
         break;

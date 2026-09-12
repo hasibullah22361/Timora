@@ -7,8 +7,10 @@ import 'package:timora/features/daily_plan/data/models/timeline_item.dart';
 import 'package:timora/features/daily_plan/presentation/widgets/auto_plan_dialog.dart';
 import 'package:timora/features/daily_plan/presentation/widgets/plan_task_sheet.dart';
 import '../../../focus/presentation/screens/focus_screen.dart';
+import 'package:timora/features/focus/presentation/providers/focus_provider.dart';
 import 'package:timora/features/schedule/presentation/screens/add_edit_activity_sheet.dart';
 import 'package:timora/features/schedule/presentation/providers/schedule_provider.dart' show scheduleNotifierProvider, scheduleActivitiesByDateProvider;
+import 'package:timora/features/ai_assistant/presentation/widgets/quick_voice_note_sheet.dart';
 
 class DailyPlanScreen extends ConsumerWidget {
   const DailyPlanScreen({super.key});
@@ -27,6 +29,11 @@ class DailyPlanScreen extends ConsumerWidget {
         elevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.mic, color: Color(0xFF6366F1)),
+            tooltip: 'Quick Voice Note',
+            onPressed: () => QuickVoiceNoteSheet.show(context),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) async {
@@ -85,12 +92,37 @@ class DailyPlanScreen extends ConsumerWidget {
             child: timelineAsync.when(
               data: (items) {
                 if (items.isEmpty) {
-                  return const Center(child: Text('Nothing planned for today.', style: TextStyle(color: Colors.grey)));
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      ref.invalidate(dailyPlanProvider(date));
+                      ref.invalidate(timelineProvider(date));
+                      ref.invalidate(scheduleActivitiesByDateProvider(date));
+                      await ref.read(timelineProvider(date).future);
+                    },
+                    child: ListView(
+                      key: const PageStorageKey('daily_plan_empty_list'),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        SizedBox(height: 120),
+                        Center(child: Text('Nothing planned for today.', style: TextStyle(color: Colors.grey))),
+                      ],
+                    ),
+                  );
                 }
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  itemCount: items.length,
-                  itemBuilder: (ctx, i) => _buildTimelineItem(context, ref, items[i]),
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(dailyPlanProvider(date));
+                    ref.invalidate(timelineProvider(date));
+                    ref.invalidate(scheduleActivitiesByDateProvider(date));
+                    await ref.read(timelineProvider(date).future);
+                  },
+                  child: ListView.builder(
+                    key: const PageStorageKey('daily_plan_timeline_list'),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    itemCount: items.length,
+                    itemBuilder: (ctx, i) => _buildTimelineItem(context, ref, items[i]),
+                  ),
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -171,10 +203,13 @@ class DailyPlanScreen extends ConsumerWidget {
     
     return planAsync.when(
       data: (plan) {
-        final plannedStr = _formatDuration(plan.plannedDurationSeconds);
-        final completedStr = _formatDuration(plan.completedDurationSeconds);
-        final remaining = (plan.plannedDurationSeconds - plan.completedDurationSeconds).clamp(0, double.infinity).toInt();
-        final remainingStr = _formatDuration(remaining);
+        final plannedMins = (plan.plannedDurationSeconds / 60).round();
+        final completedMins = (plan.completedDurationSeconds / 60).round();
+        final remainingMins = (plannedMins - completedMins).clamp(0, plannedMins);
+
+        final plannedStr = '$plannedMins min planned';
+        final completedStr = '$completedMins min completed';
+        final remainingStr = '$remainingMins min remaining';
         
         return Container(
           margin: const EdgeInsets.all(24),
@@ -202,25 +237,18 @@ class DailyPlanScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     return Column(
       children: [
-        Text(value, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
+        Text(value, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: color)),
         const SizedBox(height: 4),
         Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
       ],
     );
   }
 
-  String _formatDuration(int seconds) {
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    if (h > 0 && m > 0) return '${h}h ${m}m';
-    if (h > 0) return '${h}h';
-    return '${m}m';
-  }
-
   Widget _buildTimelineItem(BuildContext context, WidgetRef ref, TimelineItem item) {
     final theme = Theme.of(context);
     final isRoutine = item.type == TimelineItemType.routine;
     final isBlock = item.type == TimelineItemType.block;
+    final isSchedule = item.type == TimelineItemType.schedule;
     
     final timeStr = '${item.startTime.format(context)} - ${item.endTime.format(context)}';
 
@@ -243,7 +271,7 @@ class DailyPlanScreen extends ConsumerWidget {
                 width: 12,
                 height: 12,
                 decoration: BoxDecoration(
-                  color: item.isCompleted ? Colors.green : item.color,
+                  color: item.isFullyCompleted ? Colors.green : item.color,
                   shape: BoxShape.circle,
                   border: isRoutine ? null : Border.all(color: theme.colorScheme.surface, width: 2),
                 ),
@@ -264,7 +292,9 @@ class DailyPlanScreen extends ConsumerWidget {
               margin: const EdgeInsets.only(bottom: 24),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: item.isCompleted ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3) : item.color.withValues(alpha: isRoutine ? 0.05 : 0.1),
+                color: item.isFullyCompleted
+                    ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                    : item.color.withValues(alpha: isRoutine ? 0.05 : 0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: item.color.withValues(alpha: 0.2)),
               ),
@@ -280,15 +310,32 @@ class DailyPlanScreen extends ConsumerWidget {
                           item.title,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
-                            decoration: item.isCompleted ? TextDecoration.lineThrough : null,
-                            color: item.isCompleted ? Colors.grey : null,
+                            decoration: item.isFullyCompleted ? TextDecoration.lineThrough : null,
+                            color: item.isFullyCompleted ? Colors.grey : null,
                           ),
                         ),
                       ),
-                      if (isBlock && !item.isCompleted)
+                      if (isBlock && !item.isFullyCompleted)
                         IconButton(
                           icon: const Icon(Icons.self_improvement, size: 20),
+                          tooltip: 'Focus on task',
                           onPressed: () {
+                            ref.read(focusTimerProvider.notifier).startSession(
+                              durationMinutes: item.remainingMinutes > 0 ? item.remainingMinutes : item.plannedMinutes,
+                              plannedTaskBlockId: item.sourceId,
+                            );
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const FocusScreen()));
+                          },
+                        ),
+                      if (isSchedule && !item.isFullyCompleted)
+                        IconButton(
+                          icon: const Icon(Icons.self_improvement, size: 20),
+                          tooltip: 'Focus on activity',
+                          onPressed: () {
+                            ref.read(focusTimerProvider.notifier).startSession(
+                              durationMinutes: item.remainingMinutes > 0 ? item.remainingMinutes : item.plannedMinutes,
+                              scheduleActivityId: item.sourceId,
+                            );
                             Navigator.push(context, MaterialPageRoute(builder: (_) => const FocusScreen()));
                           },
                         ),
@@ -306,9 +353,7 @@ class DailyPlanScreen extends ConsumerWidget {
                                 lastDate: DateTime.now().add(const Duration(days: 365)),
                               );
                               if (date != null) {
-                                // Simplified move: delete from old, will need to create in new day
                                 ref.read(dailyPlanNotifierProvider).deletePlannedBlock(item.sourceId, ref.read(selectedDateProvider));
-                                // In a full implementation, we fetch the new DailyPlan and create a new block there.
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task moved')));
                                 }
@@ -375,7 +420,41 @@ class DailyPlanScreen extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Text(item.subtitle, style: theme.textTheme.bodySmall?.copyWith(color: item.color)),
                   const SizedBox(height: 8),
-                  Text(timeStr, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      Text(timeStr, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text('•', style: TextStyle(color: Colors.grey.withValues(alpha: 0.6), fontSize: 12)),
+                      Text(
+                        '${item.plannedMinutes} min planned',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      Text('•', style: TextStyle(color: Colors.grey.withValues(alpha: 0.6), fontSize: 12)),
+                      Text(
+                        '${item.completedMinutes} min completed',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green,
+                        ),
+                      ),
+                      Text('•', style: TextStyle(color: Colors.grey.withValues(alpha: 0.6), fontSize: 12)),
+                      Text(
+                        '${item.remainingMinutes} min remaining',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

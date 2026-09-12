@@ -7,6 +7,7 @@ import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
 import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
 import 'package:timora/features/cloud_sync/services/sync_service.dart';
 import 'package:timora/features/habits/presentation/providers/habit_provider.dart';
+import 'package:timora/features/widget/services/widget_update_service.dart';
 
 final allGoalsProvider = FutureProvider<List<GoalModel>>((ref) async {
   final repo = ref.watch(goalRepositoryProvider);
@@ -87,6 +88,7 @@ class GoalNotifier extends StateNotifier<AsyncValue<void>> {
     _ref.invalidate(milestonesProvider(goalId));
     _ref.invalidate(goalProgressProvider(goalId));
     _ref.read(syncServiceProvider).autoSync();
+    _ref.read(widgetUpdateServiceProvider).updateWidgets();
   }
 
   Future<void> createGoal(GoalModel goal) async {

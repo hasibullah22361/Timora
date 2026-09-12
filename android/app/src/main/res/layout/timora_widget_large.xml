@@ -7,307 +7,320 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- Header: Branding + Title + Progress Badge -->
-    <LinearLayout
+    <!-- 1. CLOCK (PRIMARY & LARGEST) + TOP-RIGHT NOTIFICATION 🔔 -->
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:layout_height="wrap_content">
 
-        <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:src="@drawable/ic_timora_logo"
-            android:contentDescription="Timora Icon" />
-
+        <!-- 2. NOTIFICATIONS — TOP RIGHT CORNER (Does NOT shift centered clock) -->
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="TIMORA"
-                android:textColor="@color/widget_primary"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Today's Plan"
-                android:textColor="@color/widget_text_primary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/widget_large_progress_text"
+            android:id="@+id/widget_btn_notifications"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/widget_badge_now"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="3dp"
-            android:paddingBottom="3dp"
-            android:text="0%"
-            android:textColor="@color/widget_badge_now_text"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <!-- Progress Bar -->
-    <ProgressBar
-        android:id="@+id/widget_large_progress_bar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="4dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginBottom="10dp"
-        android:max="100"
-        android:progress="0"
-        android:progressDrawable="@drawable/widget_progress_bar" />
-
-    <!-- Schedule Items Container (Today's Timeline) -->
-    <LinearLayout
-        android:id="@+id/widget_large_items_container"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center_vertical">
-
-        <!-- Item 1 (Completed or prior) -->
-        <LinearLayout
-            android:id="@+id/widget_large_item1"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentTop="true"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="6dp"
-            android:visibility="gone">
+            android:paddingStart="6dp"
+            android:paddingEnd="2dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="6dp">
 
             <TextView
-                android:id="@+id/widget_large_item1_icon"
-                android:layout_width="20dp"
-                android:layout_height="wrap_content"
-                android:text="✓"
-                android:textColor="@color/widget_accent"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_large_item1_title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:text="Morning Routine"
-                android:textColor="@color/widget_text_secondary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/widget_large_item1_time"
+                android:id="@+id/widget_notification_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="8:00 AM"
-                android:textColor="@color/widget_text_muted"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <!-- Item 2 (NOW / Active) -->
-        <LinearLayout
-            android:id="@+id/widget_large_item2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/widget_inner_card"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="8dp"
-            android:layout_marginTop="2dp"
-            android:layout_marginBottom="2dp">
+                android:text="🔔"
+                android:textSize="17sp" />
 
             <TextView
-                android:id="@+id/widget_large_item2_badge"
+                android:id="@+id/widget_notification_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
                 android:background="@drawable/widget_badge_now"
                 android:paddingStart="5dp"
                 android:paddingEnd="5dp"
                 android:paddingTop="1dp"
                 android:paddingBottom="1dp"
-                android:text="NOW"
+                android:text="0"
                 android:textColor="@color/widget_badge_now_text"
-                android:textSize="9sp"
-                android:textStyle="bold" />
+                android:textSize="10.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
 
-            <TextView
-                android:id="@+id/widget_large_item2_title"
-                android:layout_width="0dp"
+        <!-- 1. CLOCK — PRIMARY & LARGEST ELEMENT (HORIZONTALLY CENTERED) -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <!-- Primary Live Time Display -->
+            <TextClock
+                android:id="@+id/widget_clock_time"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:text="Deep Work &amp; Research"
+                android:format12Hour="hh:mm a"
+                android:format24Hour="HH:mm"
+                android:gravity="center"
+                android:textColor="@color/widget_text_primary"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.02" />
+
+            <!-- Day Underneath Time -->
+            <TextClock
+                android:id="@+id/widget_clock_day"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="EEEE"
+                android:format24Hour="EEEE"
+                android:gravity="center"
                 android:textColor="@color/widget_text_primary"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/widget_large_item2_time"
+            <!-- Date and Year -->
+            <TextClock
+                android:id="@+id/widget_clock_date"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="10:00 AM"
-                android:textColor="@color/widget_primary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- Item 3 (Upcoming 1) -->
-        <LinearLayout
-            android:id="@+id/widget_large_item3"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="6dp"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/widget_large_item3_icon"
-                android:layout_width="20dp"
-                android:layout_height="wrap_content"
-                android:text="○"
+                android:format12Hour="d MMMM yyyy"
+                android:format24Hour="d MMMM yyyy"
+                android:gravity="center"
                 android:textColor="@color/widget_text_muted"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/widget_large_item3_title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:text="Lunch &amp; Break"
-                android:textColor="@color/widget_text_primary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/widget_large_item3_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="1:00 PM"
-                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
         </LinearLayout>
+    </RelativeLayout>
 
-        <!-- Item 4 (Upcoming 2) -->
-        <LinearLayout
-            android:id="@+id/widget_large_item4"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="6dp"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/widget_large_item4_icon"
-                android:layout_width="20dp"
-                android:layout_height="wrap_content"
-                android:text="○"
-                android:textColor="@color/widget_text_muted"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/widget_large_item4_title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:text="Team Project Review"
-                android:textColor="@color/widget_text_primary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/widget_large_item4_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="3:30 PM"
-                android:textColor="@color/widget_text_secondary"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <!-- Empty state message if nothing is planned -->
-        <TextView
-            android:id="@+id/widget_large_empty_text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:padding="16dp"
-            android:text="No activities scheduled for today.\nTap to plan your day."
-            android:textColor="@color/widget_text_muted"
-            android:textSize="12sp"
-            android:visibility="gone" />
-
-    </LinearLayout>
-
-    <!-- Footer: Task count summary + Action Buttons -->
+    <!-- 3. CURRENT ACTIVITY -->
     <LinearLayout
+        android:id="@+id/widget_section_activity"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="10dp"
+        android:orientation="vertical">
 
         <TextView
-            android:id="@+id/widget_large_tasks_summary"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="0/0 Tasks Completed"
+            android:text="CURRENT ACTIVITY"
+            android:textColor="@color/widget_primary"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08" />
+
+        <TextView
+            android:id="@+id/widget_activity_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="📚 AI &amp; Data Science"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_activity_time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="09:00 AM – 11:30 AM"
             android:textColor="@color/widget_text_secondary"
             android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/widget_large_btn_focus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/widget_button_bg"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:text="Start Focus"
-            android:textColor="@color/widget_text_on_primary"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/widget_large_btn_open"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/widget_inner_card"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:text="Open Timora"
-            android:textColor="@color/widget_text_primary"
-            android:textSize="11sp"
-            android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- 4. TASKS -->
+    <LinearLayout
+        android:id="@+id/widget_section_tasks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TASKS"
+            android:textColor="@color/widget_primary"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08" />
+
+        <TextView
+            android:id="@+id/widget_task_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="No tasks right now"
+            android:textColor="@color/widget_text_muted"
+            android:textSize="11.5sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_task_item1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="☐ Finish API"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_task_item2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="☐ Research Paper"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_task_item3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="☑ Database Work"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- 5. ⭐ GOALS — MOST IMPORTANT / HIGHLIGHTED -->
+    <LinearLayout
+        android:id="@+id/widget_section_goals"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/widget_goals_card"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⭐ GOALS"
+            android:textColor="@color/widget_primary_dark"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08" />
+
+        <TextView
+            android:id="@+id/widget_goals_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Set your goals in Timora"
+            android:textColor="@color/widget_text_muted"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <!-- Goal 1 -->
+        <LinearLayout
+            android:id="@+id/widget_goal1_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/widget_goal1_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="AI &amp; Data Science"
+                    android:textColor="@color/widget_text_primary"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/widget_goal1_percentage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="80%"
+                    android:textColor="@color/widget_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/widget_goal1_progress_bar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="4dp"
+                android:max="100"
+                android:progress="80"
+                android:progressDrawable="@drawable/widget_goal_progress_bar" />
+        </LinearLayout>
+
+        <!-- Goal 2 -->
+        <LinearLayout
+            android:id="@+id/widget_goal2_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/widget_goal2_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="Research Paper"
+                    android:textColor="@color/widget_text_primary"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/widget_goal2_percentage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="60%"
+                    android:textColor="@color/widget_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/widget_goal2_progress_bar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="4dp"
+                android:max="100"
+                android:progress="60"
+                android:progressDrawable="@drawable/widget_goal_progress_bar" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

@@ -16,6 +16,12 @@ import 'package:timora/features/home/presentation/providers/home_provider.dart';
 import 'package:timora/features/goals/presentation/providers/goal_provider.dart';
 import 'package:timora/features/projects/presentation/providers/project_provider.dart';
 import 'package:timora/features/daily_plan/presentation/providers/daily_plan_provider.dart';
+import '../../../analytics/data/models/productivity_event_model.dart';
+import '../../../analytics/data/repositories/productivity_event_repository.dart';
+import '../../../analytics/services/productivity_event_service.dart';
+import '../../../analytics/services/insights_engine_service.dart';
+import '../../../analytics/services/report_generator_service.dart';
+import '../../../analytics/presentation/providers/analytics_provider.dart';
 
 final taskSearchQueryProvider = StateProvider<String>((ref) => '');
 
@@ -146,6 +152,15 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
       _ref.invalidate(projectProgressProvider(task.projectId!));
     }
     try {
+      _ref.invalidate(timoraInsightsProvider);
+      _ref.invalidate(todayTopInsightProvider);
+      _ref.invalidate(analyticsInsightsProvider);
+      _ref.invalidate(taskStatsProvider);
+      _ref.invalidate(dailyReportProvider);
+      _ref.invalidate(weeklyReportProvider);
+      _ref.invalidate(monthlyReportProvider);
+    } catch (_) {}
+    try {
       _ref.read(widgetUpdateServiceProvider).updateWidgets();
     } catch (_) {}
     try {
@@ -155,6 +170,9 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<void> createTask(TaskModel task) async {
     await _repo.createTask(task);
+    try {
+      await _ref.read(productivityEventServiceProvider).logTaskCreated(task);
+    } catch (_) {}
     _syncNotification(task);
     await _ref.read(syncRepositoryProvider).enqueueChange(
       entityType: 'tasks',
@@ -165,6 +183,29 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<void> updateTask(TaskModel task) async {
+    try {
+      final oldTask = await _repo.getTask(task.id);
+      if (oldTask != null) {
+        final dateChanged = (oldTask.dueDate != null && task.dueDate != null && !oldTask.dueDate!.isAtSameMomentAs(task.dueDate!)) ||
+            (oldTask.dueDate != null && task.dueDate == null) ||
+            (oldTask.dueDate == null && task.dueDate != null);
+        final timeChanged = oldTask.dueTime != task.dueTime;
+        if (dateChanged || timeChanged) {
+          await _ref.read(productivityEventRepositoryProvider).recordEvent(ProductivityEventModel(
+            eventType: ProductivityEventType.taskRescheduled,
+            entityType: 'task',
+            entityId: task.id,
+            metadata: {
+              'title': task.title,
+              'previousDueDate': oldTask.dueDate?.toIso8601String(),
+              'newDueDate': task.dueDate?.toIso8601String(),
+              'category': task.category,
+            },
+          ));
+        }
+      }
+    } catch (_) {}
+
     await _repo.updateTask(task);
     _syncNotification(task);
     await _ref.read(syncRepositoryProvider).enqueueChange(
@@ -181,6 +222,9 @@ class TaskNotifier extends StateNotifier<AsyncValue<void>> {
       completedAt: DateTime.now(),
     );
     await _repo.updateTask(completed);
+    try {
+      await _ref.read(productivityEventServiceProvider).logTaskCompleted(completed);
+    } catch (_) {}
     _syncNotification(completed); // will cancel
     await _ref.read(syncRepositoryProvider).enqueueChange(
       entityType: 'tasks',

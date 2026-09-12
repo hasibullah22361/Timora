@@ -65,12 +65,59 @@ class ScheduleRepository {
     // Check overlaps
     final daily = await getActivitiesForDate(activity.date);
     for (var existing in daily) {
+      if (existing.status == ActivityStatus.replaced ||
+          existing.id == activity.replacesActivityId) {
+        continue;
+      }
       if (activity.startTime.isBefore(existing.endTime) &&
           activity.endTime.isAfter(existing.startTime)) {
         throw Exception('These activities overlap with "${existing.title}".');
       }
     }
     _activities.add(activity);
+    await _saveToStorage();
+  }
+
+  Future<void> replaceActivity({
+    required ScheduleActivity originalActivity,
+    required ScheduleActivity replacementActivity,
+  }) async {
+    // Strictly preserve original time block, duration, date, position, routine info, and ID:
+    final updated = replacementActivity.copyWith(
+      id: originalActivity.id,
+      date: originalActivity.date,
+      startTime: originalActivity.startTime,
+      endTime: originalActivity.endTime,
+      routineBlockId: originalActivity.routineBlockId,
+      reminderEnabled: originalActivity.reminderEnabled,
+      isOverridden: true,
+      replacesActivityId: originalActivity.id,
+      originalActivityTitle: originalActivity.originalActivityTitle ?? originalActivity.title,
+      updatedAt: DateTime.now(),
+    );
+
+    final originalIndex = _activities.indexWhere((a) => a.id == originalActivity.id);
+    if (originalIndex >= 0) {
+      _activities[originalIndex] = updated;
+    } else {
+      _activities.add(updated);
+    }
+
+    // Clean up any extra entry if replacementActivity had a different temporary ID
+    if (replacementActivity.id != originalActivity.id) {
+      _activities.removeWhere((a) => a.id == replacementActivity.id);
+    }
+
+    // Clean up any duplicate blocks on this day for the same routine block
+    if (originalActivity.routineBlockId != null) {
+      _activities.removeWhere((a) =>
+          a.id != originalActivity.id &&
+          a.routineBlockId == originalActivity.routineBlockId &&
+          a.date.year == originalActivity.date.year &&
+          a.date.month == originalActivity.date.month &&
+          a.date.day == originalActivity.date.day);
+    }
+
     await _saveToStorage();
   }
 
@@ -98,6 +145,14 @@ class ScheduleRepository {
     if (blockIds.isEmpty) return;
     _activities.removeWhere((a) => a.routineBlockId != null && blockIds.contains(a.routineBlockId));
     await _saveToStorage();
+  }
+
+  Future<ScheduleActivity?> getActivityById(String id) async {
+    try {
+      return _activities.firstWhere((a) => a.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 }
 

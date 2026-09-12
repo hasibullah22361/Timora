@@ -14,6 +14,8 @@ class DashboardReviewWidget extends ConsumerWidget {
     final reviewAsync = ref.watch(activeReviewProvider(todayReviewReq));
     
     return reviewAsync.when(
+      skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
       data: (review) {
         final isCompleted = review.status == ReviewStatus.completed;
         

@@ -11,6 +11,8 @@ class ProductivityEventType {
   static const String activityStarted = 'ACTIVITY_STARTED';
   static const String activityCompleted = 'ACTIVITY_COMPLETED';
   static const String activityMissed = 'ACTIVITY_MISSED';
+  static const String activityRescheduled = 'ACTIVITY_RESCHEDULED';
+  static const String activityReplaced = 'ACTIVITY_REPLACED';
 
   static const String routineCompleted = 'ROUTINE_COMPLETED';
   static const String routineMissed = 'ROUTINE_MISSED';

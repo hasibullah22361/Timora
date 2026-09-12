@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../data/models/analytics_models.dart';
 import '../data/models/productivity_score_model.dart';
@@ -9,6 +8,7 @@ import '../../tasks/presentation/providers/task_provider.dart';
 import '../../habits/presentation/providers/habit_provider.dart';
 import '../../schedule/data/models/schedule_activity.dart';
 import '../../schedule/presentation/providers/schedule_provider.dart';
+import 'insights_engine_service.dart';
 
 final analyticsServiceProvider = Provider<AnalyticsService>((ref) {
   return AnalyticsService(ref);
@@ -127,73 +127,40 @@ class AnalyticsService {
   }
 
   Future<PlanningStats> getPlanningStats(AnalyticsPeriod period) async {
-    // Very simplified for demonstration
+    final range = _getDateRange(period);
     final focusStats = await getFocusStats(period);
 
-    // In a real app we'd sum up all PlannedTaskBlock duration in the period.
-    // Simulating planned time as 120% of focus time for now.
-    final planned = (focusStats.totalSeconds * 1.2).toInt();
+    final activities = await _ref.read(scheduleActivitiesProvider.future);
+    int plannedActivitySeconds = 0;
+
+    for (final act in activities) {
+      if (act.startTime.isAfter(range.start) && act.startTime.isBefore(range.end)) {
+        plannedActivitySeconds += act.endTime.difference(act.startTime).inSeconds;
+      }
+    }
+
+    final allTasks = await _ref.read(allTasksProvider.future);
+    int plannedTaskSeconds = 0;
+    for (final t in allTasks) {
+      if (t.dueDate != null && t.dueDate!.isAfter(range.start) && t.dueDate!.isBefore(range.end)) {
+        plannedTaskSeconds += (t.estimatedDurationMinutes ?? 30) * 60;
+      }
+    }
+
+    final totalPlanned = plannedActivitySeconds > 0
+        ? plannedActivitySeconds
+        : (plannedTaskSeconds > 0 ? plannedTaskSeconds : (focusStats.totalSeconds > 0 ? focusStats.totalSeconds : 3600));
 
     return PlanningStats(
-      plannedSeconds: planned,
+      plannedSeconds: totalPlanned,
       actualFocusSeconds: focusStats.totalSeconds,
       planAccuracyPercentage:
-          planned == 0 ? 0.0 : focusStats.totalSeconds / planned,
+          totalPlanned == 0 ? 0.0 : (focusStats.totalSeconds / totalPlanned).clamp(0.0, 1.0),
     );
   }
 
   Future<List<AnalyticsInsight>> getInsights(AnalyticsPeriod period) async {
-    final insights = <AnalyticsInsight>[];
-    final focus = await getFocusStats(period);
-
-    if (focus.totalSeconds > 0) {
-      // Find best day
-      DateTime? bestDay;
-      int maxFocus = 0;
-      focus.dailyTrends.forEach((k, v) {
-        if (v > maxFocus) {
-          maxFocus = v;
-          bestDay = k;
-        }
-      });
-
-      if (bestDay != null) {
-        const days = [
-          'Monday',
-          'Tuesday',
-          'Wednesday',
-          'Thursday',
-          'Friday',
-          'Saturday',
-          'Sunday'
-        ];
-        insights.add(AnalyticsInsight(
-          id: const Uuid().v4(),
-          type: 'focus_best_day',
-          description:
-              '${days[bestDay!.weekday - 1]} was your highest-focus day.',
-        ));
-      }
-
-      insights.add(AnalyticsInsight(
-        id: const Uuid().v4(),
-        type: 'focus_average',
-        description:
-            'Your average focus session is ${focus.averageSessionSeconds ~/ 60} minutes.',
-      ));
-    }
-
-    final tasks = await getTaskStats(period);
-    if (tasks.completed > 0) {
-      insights.add(AnalyticsInsight(
-        id: const Uuid().v4(),
-        type: 'task_completion',
-        description:
-            'You completed ${(tasks.completionRate * 100).toInt()}% of your tasks in this period.',
-      ));
-    }
-
-    return insights;
+    return _ref.read(insightsEngineServiceProvider).generateInsights(period);
   }
 
   Future<ProductivityScoreModel> getProductivityScore(AnalyticsPeriod period) async {

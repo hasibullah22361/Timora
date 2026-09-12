@@ -16,7 +16,17 @@ class ProgressSection extends ConsumerWidget {
     final scheduleAsync = ref.watch(dailyScheduleProvider);
     final todayTasksAsync = ref.watch(todayTasksProvider);
     final focusSessionsAsync = ref.watch(todayFocusSessionsProvider);
-    final timerState = ref.watch(focusTimerProvider);
+    // Use select to only trigger rebuilds when focus elapsed minutes change, avoiding 59 unnecessary rebuilds/min
+    final activeFocusElapsedMinutes = ref.watch(focusTimerProvider.select((state) {
+      final s = state.activeSession;
+      if (s != null &&
+          (s.status == FocusSessionStatus.running ||
+              s.status == FocusSessionStatus.paused ||
+              s.status == FocusSessionStatus.breakTime)) {
+        return state.elapsedSeconds ~/ 60;
+      }
+      return 0;
+    }));
 
     // 1. Compute Schedule completion
     int totalActivities = 0;
@@ -47,11 +57,8 @@ class ProgressSection extends ConsumerWidget {
           .fold<int>(0, (sum, s) => sum + s.actualDurationSeconds);
     });
 
-    if (timerState.activeSession != null &&
-        (timerState.activeSession!.status == FocusSessionStatus.running ||
-            timerState.activeSession!.status == FocusSessionStatus.paused ||
-            timerState.activeSession!.status == FocusSessionStatus.breakTime)) {
-      totalFocusSeconds += timerState.elapsedSeconds;
+    if (activeFocusElapsedMinutes > 0) {
+      totalFocusSeconds += activeFocusElapsedMinutes * 60;
     }
 
     final focusHours = totalFocusSeconds ~/ 3600;

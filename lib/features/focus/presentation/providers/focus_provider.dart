@@ -9,6 +9,15 @@ import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dar
 import 'package:timora/features/cloud_sync/services/sync_service.dart';
 import '../../../notifications/application/notification_service.dart';
 import '../../../widget/services/widget_update_service.dart';
+import '../../../analytics/services/insights_engine_service.dart';
+import '../../../analytics/services/report_generator_service.dart';
+import '../../../analytics/presentation/providers/analytics_provider.dart';
+import 'package:timora/features/schedule/data/models/schedule_activity.dart';
+import 'package:timora/features/schedule/data/repositories/schedule_repository.dart';
+import 'package:timora/features/schedule/presentation/providers/schedule_provider.dart';
+import 'package:timora/features/daily_plan/data/models/planned_task_block_model.dart';
+import 'package:timora/features/daily_plan/data/repositories/daily_plan_repository.dart';
+import 'package:timora/features/daily_plan/presentation/providers/daily_plan_provider.dart';
 
 class FocusTimerState {
   final FocusSessionModel? activeSession;
@@ -152,6 +161,40 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
     _updateWidgets();
   }
 
+  Future<void> _updateLinkedEntities(FocusSessionModel finished) async {
+    try {
+      if (finished.scheduleActivityId != null && finished.scheduleActivityId!.isNotEmpty) {
+        final scheduleRepo = _ref.read(scheduleRepositoryProvider);
+        final act = await scheduleRepo.getActivityById(finished.scheduleActivityId!);
+        if (act != null) {
+          final plannedSecs = act.endTime.difference(act.startTime).inSeconds.abs();
+          if (finished.actualDurationSeconds >= plannedSecs || finished.status == FocusSessionStatus.completed) {
+            final updated = act.copyWith(status: ActivityStatus.completed, completedAt: DateTime.now());
+            await scheduleRepo.updateActivity(updated);
+            _ref.invalidate(scheduleActivitiesProvider);
+            _ref.invalidate(scheduleActivitiesByDateProvider(act.date));
+          }
+        }
+      }
+
+      if (finished.plannedTaskBlockId != null && finished.plannedTaskBlockId!.isNotEmpty) {
+        final dailyPlanRepo = _ref.read(dailyPlanRepositoryProvider);
+        final block = await dailyPlanRepo.getBlockById(finished.plannedTaskBlockId!);
+        if (block != null) {
+          if (finished.actualDurationSeconds >= block.estimatedDurationSeconds || finished.status == FocusSessionStatus.completed) {
+            final updated = block.copyWith(status: PlannedBlockStatus.completed);
+            await dailyPlanRepo.saveBlock(updated);
+          }
+        }
+      }
+
+      final today = DateTime.now();
+      final dateOnly = DateTime(today.year, today.month, today.day);
+      _ref.invalidate(dailyPlanProvider(dateOnly));
+      _ref.invalidate(timelineProvider(dateOnly));
+    } catch (_) {}
+  }
+
   Future<void> _finishSessionAutomatically() async {
     _uiTimer?.cancel();
     final s = state.activeSession!;
@@ -167,9 +210,18 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
       operation: SyncOperation.create,
     );
     state = FocusTimerState(activeSession: finished, elapsedSeconds: s.plannedDurationSeconds);
+    await _updateLinkedEntities(finished);
     _ref.invalidate(todayFocusSessionsProvider);
     _ref.invalidate(allFocusSessionsProvider);
     _ref.invalidate(focusStatsProvider);
+    try {
+      _ref.invalidate(timoraInsightsProvider);
+      _ref.invalidate(todayTopInsightProvider);
+      _ref.invalidate(analyticsInsightsProvider);
+      _ref.invalidate(dailyReportProvider);
+      _ref.invalidate(weeklyReportProvider);
+      _ref.invalidate(monthlyReportProvider);
+    } catch (_) {}
     _ref.read(syncServiceProvider).autoSync();
     _updateWidgets();
   }
@@ -201,9 +253,18 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerState> {
       operation: SyncOperation.create,
     );
     state = FocusTimerState(activeSession: finished, elapsedSeconds: actualDurationSeconds);
+    await _updateLinkedEntities(finished);
     _ref.invalidate(todayFocusSessionsProvider);
     _ref.invalidate(allFocusSessionsProvider);
     _ref.invalidate(focusStatsProvider);
+    try {
+      _ref.invalidate(timoraInsightsProvider);
+      _ref.invalidate(todayTopInsightProvider);
+      _ref.invalidate(analyticsInsightsProvider);
+      _ref.invalidate(dailyReportProvider);
+      _ref.invalidate(weeklyReportProvider);
+      _ref.invalidate(monthlyReportProvider);
+    } catch (_) {}
     _ref.read(syncServiceProvider).autoSync();
     _updateWidgets();
     return finished;

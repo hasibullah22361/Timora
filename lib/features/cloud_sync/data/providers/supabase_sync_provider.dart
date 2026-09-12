@@ -170,47 +170,52 @@ class SupabaseSyncProvider implements CloudSyncProvider {
       'productivity_events',
     ];
 
-    for (var table in tables) {
-      try {
-        var query = client.from(table).select().eq('user_id', user.id);
-        if (lastSyncedAt != null) {
-          if (table == 'routine_blocks' || table == 'habit_logs') {
-            query = query.gt('created_at', lastSyncedAt.toIso8601String());
-          } else {
-            query = query.gt('updated_at', lastSyncedAt.toIso8601String());
+    // Pull all tables and user profile concurrently via Future.wait
+    // This avoids 21 sequential network roundtrips over mobile connections
+    await Future.wait([
+      ...tables.map((table) async {
+        try {
+          var query = client.from(table).select().eq('user_id', user.id);
+          if (lastSyncedAt != null) {
+            if (table == 'routine_blocks' || table == 'habit_logs') {
+              query = query.gt('created_at', lastSyncedAt.toIso8601String());
+            } else {
+              query = query.gt('updated_at', lastSyncedAt.toIso8601String());
+            }
           }
-        }
 
-        final List<dynamic> rows = await query;
-        for (var row in rows) {
-          final id = row['id'] as String;
-          final sUpdated = row['updated_at'] ?? row['created_at'] ?? DateTime.now().toIso8601String();
-          changes[id] = {
-            ...row,
-            '_entityType': _resolveEntityType(table),
-            '_serverUpdatedAt': sUpdated,
-            '_deletedAt': row['is_deleted'] == true ? sUpdated : null,
-          };
+          final List<dynamic> rows = await query;
+          for (var row in rows) {
+            final id = row['id'] as String;
+            final sUpdated = row['updated_at'] ?? row['created_at'] ?? DateTime.now().toIso8601String();
+            changes[id] = {
+              ...row,
+              '_entityType': _resolveEntityType(table),
+              '_serverUpdatedAt': sUpdated,
+              '_deletedAt': row['is_deleted'] == true ? sUpdated : null,
+            };
+          }
+        } catch (e) {
+          debugPrint('[SupabaseSync] Pull notice on $table: $e');
         }
-      } catch (e) {
-        debugPrint('[SupabaseSync] Pull notice on $table: $e');
-      }
-    }
-
-    // Pull profile (keyed on id = user.id)
-    try {
-      final List<dynamic> profileRows = await client.from('profiles').select().eq('id', user.id);
-      if (profileRows.isNotEmpty) {
-        final pRow = profileRows.first as Map<String, dynamic>;
-        changes[user.id] = {
-          ...pRow,
-          '_entityType': 'user_profile',
-          '_serverUpdatedAt': pRow['updated_at'] ?? DateTime.now().toIso8601String(),
-        };
-      }
-    } catch (e) {
-      debugPrint('[SupabaseSync] Profile pull notice: $e');
-    }
+      }),
+      () async {
+        // Pull profile (keyed on id = user.id)
+        try {
+          final List<dynamic> profileRows = await client.from('profiles').select().eq('id', user.id);
+          if (profileRows.isNotEmpty) {
+            final pRow = profileRows.first as Map<String, dynamic>;
+            changes[user.id] = {
+              ...pRow,
+              '_entityType': 'user_profile',
+              '_serverUpdatedAt': pRow['updated_at'] ?? DateTime.now().toIso8601String(),
+            };
+          }
+        } catch (e) {
+          debugPrint('[SupabaseSync] Profile pull notice: $e');
+        }
+      }(),
+    ]);
 
     debugPrint('[SupabaseSync] Pull complete: retrieved ${changes.length} cloud records for user ${user.id}');
     return changes;

@@ -225,6 +225,8 @@ class ProfileScreen extends ConsumerWidget {
                                             File(profile.customImagePath!),
                                             width: 72,
                                             height: 72,
+                                            cacheWidth: 200,
+                                            cacheHeight: 200,
                                             fit: BoxFit.cover,
                                           ),
                                   )

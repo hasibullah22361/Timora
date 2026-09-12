@@ -38,12 +38,20 @@ class VoiceAnnouncementService {
 
   bool get _spokenEnabled => _settingsRepo?.spokenAnnouncementsEnabled ?? true;
 
-  Future<void> _initTts() async {
+  Future<void>? _initFuture;
+
+  Future<void> _initTts() {
+    _initFuture ??= _doInitTts();
+    return _initFuture!;
+  }
+
+  Future<void> _doInitTts() async {
     if (_isInitialized) return;
     try {
       if (!kIsWeb) {
         await _flutterTts.setSpeechRate(0.5);
-        await _flutterTts.setVolume(1.0);
+        final vol = _settingsRepo?.speakingVolume ?? 1.0;
+        await _flutterTts.setVolume(vol.clamp(0.0, 1.0));
         await _flutterTts.setPitch(1.0);
 
         try {
@@ -84,27 +92,52 @@ class VoiceAnnouncementService {
   }
 
   /// Explicitly switches voice between male and female safely stopping any active playback.
-  Future<void> switchVoice({required bool isMale, required double speed}) async {
+  Future<void> switchVoice({required bool isMale, required double speed, double? volume}) async {
     try {
       await stop();
       if (_currentSpeechCompleter != null && !_currentSpeechCompleter!.isCompleted) {
         _currentSpeechCompleter!.complete();
       }
       await _initTts();
-      await _configureVoice(isMale: isMale, speed: speed);
-      debugPrint('[TimoraTTS] Voice switched safely: male=$isMale, speed=${speed}x');
+      final vol = volume ?? _settingsRepo?.speakingVolume ?? 1.0;
+      await _configureVoice(isMale: isMale, speed: speed, volume: vol);
+      debugPrint('[TimoraTTS] Voice switched safely: male=$isMale, speed=${speed}x, volume=${(vol * 100).round()}%');
     } catch (e) {
       debugPrint('[TimoraTTS] Error switching voice: $e');
     }
   }
 
-  /// Configures human-like natural adult male/female voice, pitch, and pacing.
-  Future<void> _configureVoice({required bool isMale, required double speed}) async {
+  /// Explicitly sets speaking notification volume (0.0 to 1.0) immediately.
+  Future<void> setVolume(double volume) async {
+    try {
+      await _initTts();
+      final vol = volume.clamp(0.0, 1.0);
+      await _flutterTts.setVolume(vol);
+      debugPrint('[TimoraTTS] Volume set to: ${(vol * 100).round()}%');
+    } catch (e) {
+      debugPrint('[TimoraTTS] Error setting volume: $e');
+    }
+  }
+
+  /// Configures human-like natural adult male/female voice, pitch, pacing, and volume.
+  Future<void> _configureVoice({
+    required bool isMale,
+    required double speed,
+    double? volume,
+  }) async {
     if (!kIsWeb) {
       // 1. Always stop previous utterance before reconfiguring parameters
       try {
         await _flutterTts.stop();
       } catch (_) {}
+
+      // Volume configuration (0.0 to 1.0):
+      try {
+        final double vol = volume ?? _settingsRepo?.speakingVolume ?? 1.0;
+        await _flutterTts.setVolume(vol.clamp(0.0, 1.0));
+      } catch (e) {
+        debugPrint('[TimoraTTS] Volume set notice: $e');
+      }
 
       try {
         final List<dynamic>? voices = await _flutterTts.getVoices;
@@ -143,12 +176,16 @@ class VoiceAnnouncementService {
             }
           }
 
-          // Fallback pass: any English voice if target gender not found
+          // Fallback pass: any English voice if target gender not found, but do NOT force female voice when male voice is requested
           if (selectedVoice == null) {
             for (final v in voices) {
               if (v is Map) {
+                final name = (v['name'] ?? '').toString().toLowerCase();
                 final locale = (v['locale'] ?? '').toString().toLowerCase();
                 if (locale.startsWith('en')) {
+                  if (isMale && name.contains('female')) {
+                    continue;
+                  }
                   selectedVoice = {
                     'name': v['name'].toString(),
                     'locale': v['locale'].toString(),
@@ -181,10 +218,10 @@ class VoiceAnnouncementService {
       }
 
       // Adult human pitch:
-      // Male: 0.90 (natural, warm adult resonance)
+      // Male: 0.82 (natural, warm adult resonance / masculine pitch)
       // Female: 1.05 (natural, clear, friendly adult tone)
       try {
-        final double pitch = isMale ? 0.90 : 1.05;
+        final double pitch = isMale ? 0.82 : 1.05;
         await _flutterTts.setPitch(pitch);
       } catch (e) {
         debugPrint('[TimoraTTS] Pitch set notice: $e');
@@ -327,10 +364,11 @@ class VoiceAnnouncementService {
       await stop();
       final isMale = _settingsRepo?.isMaleVoice ?? false;
       final speed = _settingsRepo?.speakingSpeed ?? 1.0;
-      await _configureVoice(isMale: isMale, speed: speed);
+      final volume = _settingsRepo?.speakingVolume ?? 1.0;
+      await _configureVoice(isMale: isMale, speed: speed, volume: volume);
 
       _currentSpeechCompleter = Completer<void>();
-      debugPrint('[TimoraTTS] Speaking (male: $isMale, speed: ${speed}x): "$phrase"');
+      debugPrint('[TimoraTTS] Speaking (male: $isMale, speed: ${speed}x, vol: ${(volume * 100).round()}%): "$phrase"');
       await _flutterTts.speak(phrase);
       return true;
     } catch (e) {
@@ -449,6 +487,52 @@ class VoiceAnnouncementService {
     debugPrint('[TimoraTTS] Event type: test_notification');
     // respectSetting = false so this always fires for testing purposes
     return _speak(phrase, dedupeKey: 'test_${DateTime.now().millisecondsSinceEpoch}', respectSetting: false);
+  }
+
+  /// Plays personalized Morning Brief audio with requested gender voice, respecting silent/vibrate mode.
+  Future<bool> speakMorningBrief({
+    required String briefText,
+    required bool isMale,
+    double? speed,
+    bool checkAutoPlay = false,
+  }) async {
+    final clean = _cleanText(briefText);
+    if (clean.isEmpty) return false;
+
+    if (checkAutoPlay) {
+      final autoPlay = _settingsRepo?.morningBriefAutoPlay ?? true;
+      if (!autoPlay) {
+        debugPrint('[TimoraTTS] Morning Brief autoPlay disabled');
+        return false;
+      }
+    }
+
+    // Check device ringer audio mode (silent / vibrate check)
+    try {
+      final audioMode = await _audioModeService.getCurrentMode();
+      if (audioMode == AudioMode.silent || audioMode == AudioMode.vibrate) {
+        debugPrint('[TimoraTTS] Phone in silent/vibrate mode — morning brief audio muted');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('[TimoraTTS] Audio mode check notice: $e');
+    }
+
+    try {
+      await _initTts();
+      await stop();
+      final effectiveSpeed = speed ?? _settingsRepo?.speakingSpeed ?? 1.0;
+      final volume = _settingsRepo?.speakingVolume ?? 1.0;
+      await _configureVoice(isMale: isMale, speed: effectiveSpeed, volume: volume);
+
+      _currentSpeechCompleter = Completer<void>();
+      debugPrint('[TimoraTTS] Speaking Morning Brief (male: $isMale, speed: ${effectiveSpeed}x, vol: ${(volume * 100).round()}%)');
+      await _flutterTts.speak(clean);
+      return true;
+    } catch (e) {
+      debugPrint('[TimoraTTS] Error speaking morning brief: $e');
+      return false;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -590,7 +674,7 @@ class VoiceAnnouncementService {
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Manually speak a sample phrase (Test Voice button). Always fires regardless of setting.
-  Future<void> speakSampleAnnouncement([String? activityName]) async {
+  Future<void> speakSampleAnnouncement({String? activityName, double? volume}) async {
     final phrase = (activityName != null && activityName.isNotEmpty && activityName != 'Gym')
         ? 'Hey, your $activityName session starts at 9 AM.'
         : 'Hey, your AI and Data Science study session starts at 9 AM.';
@@ -599,8 +683,9 @@ class VoiceAnnouncementService {
       await stop();
       final isMale = _settingsRepo?.isMaleVoice ?? false;
       final speed = _settingsRepo?.speakingSpeed ?? 1.0;
-      await _configureVoice(isMale: isMale, speed: speed);
-      debugPrint('[TimoraTTS] Test Voice (male: $isMale, speed: ${speed}x): "$phrase"');
+      final effectiveVolume = (volume ?? _settingsRepo?.speakingVolume ?? 1.0).clamp(0.0, 1.0);
+      await _configureVoice(isMale: isMale, speed: speed, volume: effectiveVolume);
+      debugPrint('[TimoraTTS] Test Voice (male: $isMale, speed: ${speed}x, vol: ${(effectiveVolume * 100).round()}%): "$phrase"');
       await _flutterTts.speak(phrase);
     } catch (e) {
       debugPrint('[TimoraTTS] Test Voice error: $e');

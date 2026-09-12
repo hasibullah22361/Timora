@@ -100,6 +100,80 @@ void main() {
       expect(restored.scheduleItems, isEmpty);
     });
 
+    test('WidgetTaskItem serialization and deserialization', () {
+      const item = WidgetTaskItem(
+        id: 'task-101',
+        title: 'Finish API',
+        isCompleted: false,
+      );
+
+      final jsonMap = item.toJson();
+      expect(jsonMap['id'], 'task-101');
+      expect(jsonMap['title'], 'Finish API');
+      expect(jsonMap['isCompleted'], false);
+
+      final restored = WidgetTaskItem.fromJson(jsonMap);
+      expect(restored.id, item.id);
+      expect(restored.title, item.title);
+      expect(restored.isCompleted, false);
+    });
+
+    test('WidgetGoalItem serialization and deserialization', () {
+      const item = WidgetGoalItem(
+        id: 'goal-202',
+        title: 'AI & Data Science',
+        progressPercentage: 80,
+      );
+
+      final jsonMap = item.toJson();
+      expect(jsonMap['id'], 'goal-202');
+      expect(jsonMap['title'], 'AI & Data Science');
+      expect(jsonMap['progressPercentage'], 80);
+
+      final restored = WidgetGoalItem.fromJson(jsonMap);
+      expect(restored.id, item.id);
+      expect(restored.title, item.title);
+      expect(restored.progressPercentage, 80);
+    });
+
+    test('WidgetData full serialization round-trip with updated fields', () {
+      final data = WidgetData(
+        unreadNotificationsCount: 3,
+        currentActivityTitle: '📚 AI & Data Science',
+        currentActivityTime: '1:00 PM – 2:30 PM',
+        isActivityRunning: true,
+        tasks: const [
+          WidgetTaskItem(id: 't1', title: 'Finish API', isCompleted: false),
+          WidgetTaskItem(id: 't2', title: 'Research Paper', isCompleted: false),
+          WidgetTaskItem(id: 't3', title: 'Database Work', isCompleted: true),
+        ],
+        goals: const [
+          WidgetGoalItem(id: 'g1', title: 'AI & Data Science', progressPercentage: 80),
+          WidgetGoalItem(id: 'g2', title: 'Research Paper', progressPercentage: 60),
+        ],
+        lastUpdatedMillis: 1725350000000,
+      );
+
+      final jsonStr = data.serialize();
+      final decodedMap = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final restored = WidgetData.fromJson(decodedMap);
+
+      expect(restored.unreadNotificationsCount, 3);
+      expect(restored.currentActivityTitle, '📚 AI & Data Science');
+      expect(restored.currentActivityTime, '1:00 PM – 2:30 PM');
+      expect(restored.isActivityRunning, true);
+      expect(restored.tasks.length, 3);
+      expect(restored.tasks[0].title, 'Finish API');
+      expect(restored.tasks[0].isCompleted, false);
+      expect(restored.tasks[2].title, 'Database Work');
+      expect(restored.tasks[2].isCompleted, true);
+      expect(restored.goals.length, 2);
+      expect(restored.goals[0].title, 'AI & Data Science');
+      expect(restored.goals[0].progressPercentage, 80);
+      expect(restored.goals[1].title, 'Research Paper');
+      expect(restored.goals[1].progressPercentage, 60);
+    });
+
     test('Progress percentage calculation accuracy', () {
       int calculateProgress(int completed, int total) {
         return total > 0 ? ((completed / total) * 100).round() : 0;

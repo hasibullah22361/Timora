@@ -8,6 +8,7 @@ import 'package:timora/features/analytics/presentation/providers/analytics_provi
 import 'package:timora/features/ai_assistant/presentation/widgets/ai_coach_card.dart';
 import '../widgets/productivity_heatmap_widget.dart';
 import '../widgets/consistency_score_card.dart';
+import '../widgets/insight_card_widget.dart';
 import 'reports_screen.dart';
 
 class AnalyticsScreen extends ConsumerWidget {
@@ -39,37 +40,54 @@ class AnalyticsScreen extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: _buildPeriodSelector(context, ref, period)),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          const SliverToBoxAdapter(child: _ProductivityScoreHeroCard()),
-          const SliverToBoxAdapter(child: SizedBox(height: 8)),
-          const SliverToBoxAdapter(child: AICoachCard()),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: ConsistencyScoreCard(),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(productivityScoreProvider);
+          ref.invalidate(focusStatsProvider);
+          ref.invalidate(taskStatsProvider);
+          ref.invalidate(planningStatsProvider);
+          ref.invalidate(analyticsInsightsProvider);
+          await Future.wait([
+            ref.read(productivityScoreProvider.future),
+            ref.read(focusStatsProvider.future),
+            ref.read(taskStatsProvider.future),
+            ref.read(planningStatsProvider.future),
+          ]);
+        },
+        child: CustomScrollView(
+          key: const PageStorageKey('analytics_custom_scroll'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: _buildPeriodSelector(context, ref, period)),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: _ProductivityScoreHeroCard()),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            const SliverToBoxAdapter(child: AICoachCard()),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: ConsistencyScoreCard(),
+              ),
             ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: ProductivityHeatmapWidget(),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: ProductivityHeatmapWidget(),
+              ),
             ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          const SliverToBoxAdapter(child: _SummaryCards()),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          const SliverToBoxAdapter(child: _InsightsSection()),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          const SliverToBoxAdapter(child: _FocusTrendChart()),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          const SliverToBoxAdapter(child: _TaskBreakdownChart()),
-          const SliverToBoxAdapter(child: SizedBox(height: 40)),
-        ],
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: _SummaryCards()),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            const SliverToBoxAdapter(child: _InsightsSection()),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            const SliverToBoxAdapter(child: _FocusTrendChart()),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            const SliverToBoxAdapter(child: _TaskBreakdownChart()),
+            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+          ],
+        ),
       ),
     );
   }
@@ -371,27 +389,27 @@ class _InsightsSection extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Insights',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '🧠 Intelligent Insights',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Text(
+                    '${insights.length} active',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
-              ...insights.map((i) => Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.secondaryContainer
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.lightbulb,
-                            color: theme.colorScheme.secondary),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text(i.description)),
-                      ],
-                    ),
-                  )),
+              ...insights.map((insight) => InsightCardWidget(insight: insight)),
             ],
           ),
         );
@@ -542,6 +560,44 @@ class _FocusTrendChart extends ConsumerWidget {
                     const Center(child: Text('Error loading chart')),
               ),
             ),
+            Consumer(
+              builder: (context, ref, _) {
+                final insightsAsync = ref.watch(analyticsInsightsProvider);
+                return insightsAsync.maybeWhen(
+                  data: (list) {
+                    final peak = list.where((i) => i.category == InsightCategory.productivityPattern).firstOrNull;
+                    if (peak == null || !peak.hasSufficientData) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 14.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text('🧠', style: TextStyle(fontSize: 14)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                peak.description,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -638,6 +694,44 @@ class _TaskBreakdownChart extends ConsumerWidget {
                 error: (_, __) =>
                     const Center(child: Text('Error loading chart')),
               ),
+            ),
+            Consumer(
+              builder: (context, ref, _) {
+                final insightsAsync = ref.watch(analyticsInsightsProvider);
+                return insightsAsync.maybeWhen(
+                  data: (list) {
+                    final alert = list.where((i) => i.category == InsightCategory.missedTask || i.category == InsightCategory.scheduleEffectiveness).firstOrNull;
+                    if (alert == null || !alert.hasSufficientData) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 14.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(alert.icon, style: const TextStyle(fontSize: 14)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                alert.description,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                );
+              },
             ),
           ],
         ),

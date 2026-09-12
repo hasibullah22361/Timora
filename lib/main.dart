@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,8 +8,10 @@ import 'package:timezone/data/latest.dart' as tz;
 
 import 'core/config/supabase_config.dart';
 import 'core/providers/shared_prefs_provider.dart';
+import 'core/services/ad_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/notifications/application/notification_service.dart';
+import 'features/security/presentation/widgets/app_lock_lifecycle_wrapper.dart';
 import 'features/settings/data/repositories/notification_settings_repository.dart';
 import 'features/settings/presentation/providers/settings_provider.dart';
 import 'features/splash/presentation/screens/splash_screen.dart';
@@ -48,6 +51,9 @@ Future<void> main() async {
 
     // Initialize Home Screen Widget navigation listener on Android
     WidgetNavigationService.initialize();
+
+    // Initialize Google Mobile Ads SDK safely in background without blocking UI
+    unawaited(AdService.initialize());
   }
 
   runApp(
@@ -78,6 +84,11 @@ class TimoraApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: settings.themeMode,
       home: const SplashScreen(),
+      builder: (context, child) {
+        return AppLockLifecycleWrapper(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

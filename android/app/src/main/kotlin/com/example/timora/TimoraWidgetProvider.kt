@@ -1,5 +1,6 @@
 package com.example.timora
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -9,6 +10,7 @@ import android.content.Intent
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
+import java.util.Calendar
 
 /**
  * TimoraWidgetProvider — Base and concrete AppWidgetProviders for Small, Medium, and Large widgets.
@@ -29,6 +31,17 @@ abstract class BaseTimoraWidgetProvider : AppWidgetProvider() {
         Log.d("TimoraWidget", "${javaClass.simpleName} enabled")
         TimoraWidgetProvider.updateAllWidgets(context)
     }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        val action = intent.action
+        if (action == Intent.ACTION_DATE_CHANGED ||
+            action == Intent.ACTION_TIME_CHANGED ||
+            action == Intent.ACTION_TIMEZONE_CHANGED) {
+            Log.d("TimoraWidget", "Date/Time changed broadcast received ($action) — updating widgets")
+            TimoraWidgetProvider.updateAllWidgets(context)
+        }
+    }
 }
 
 class TimoraSmallWidgetProvider : BaseTimoraWidgetProvider()
@@ -41,6 +54,7 @@ object TimoraWidgetProvider {
 
     const val ACTION_OPEN_HOME = "com.example.timora.ACTION_OPEN_HOME"
     const val ACTION_OPEN_TASK = "com.example.timora.ACTION_OPEN_TASK"
+    const val ACTION_OPEN_NOTIFICATIONS = "com.example.timora.ACTION_OPEN_NOTIFICATIONS"
     const val ACTION_START_FOCUS = "com.example.timora.ACTION_START_FOCUS"
     const val EXTRA_TASK_ID = "task_id"
 
@@ -72,7 +86,39 @@ object TimoraWidgetProvider {
             appWidgetManager.updateAppWidget(id, views)
         }
 
+        // Schedule exact midnight update
+        scheduleMidnightUpdate(context)
+
         Log.d(TAG, "All widgets updated: small=${smallIds.size}, medium=${mediumIds.size}, large=${largeIds.size}")
+    }
+
+    private fun scheduleMidnightUpdate(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val midnightCalendar = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 1)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val intent = Intent(context, TimoraLargeWidgetProvider::class.java).apply {
+            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            99981,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        try {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                midnightCalendar.timeInMillis,
+                pendingIntent
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Notice: could not set exact midnight alarm: ${e.message}")
+        }
     }
 
     private fun getLaunchIntent(context: Context, action: String, taskId: String? = null): PendingIntent {
@@ -97,28 +143,28 @@ object TimoraWidgetProvider {
     // ─────────────────────────────────────────────────────────────────────────
     private fun buildSmallViews(context: Context, data: TimoraWidgetData): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.timora_widget_small)
-        val (current, _) = data.resolveCurrentAndNext()
 
         // Root click -> Open Timora
         views.setOnClickPendingIntent(R.id.widget_root, getLaunchIntent(context, ACTION_OPEN_HOME))
 
-        // Progress text & bar
-        views.setTextViewText(R.id.widget_small_progress_text, "${data.progressPercentage}%")
-        views.setProgressBar(R.id.widget_small_progress_bar, 100, data.progressPercentage, false)
-        views.setTextViewText(R.id.widget_small_tasks_count, "${data.completedTasksCount}/${data.totalTasksCount} Tasks")
+        // Top-Right Notifications Button
+        views.setOnClickPendingIntent(R.id.widget_btn_notifications, getLaunchIntent(context, ACTION_OPEN_NOTIFICATIONS))
+        if (data.unreadNotificationsCount > 0) {
+            views.setViewVisibility(R.id.widget_notification_badge, View.VISIBLE)
+            views.setTextViewText(R.id.widget_notification_badge, "${data.unreadNotificationsCount}")
+        } else {
+            views.setViewVisibility(R.id.widget_notification_badge, View.GONE)
+        }
 
         // Current Activity
-        if (current != null) {
-            views.setTextViewText(R.id.widget_small_status_badge, current.statusBadge)
-            views.setTextViewText(R.id.widget_small_current_title, current.title)
-            views.setTextViewText(R.id.widget_small_current_time, current.timeStr)
-            if (current.id.isNotBlank()) {
-                views.setOnClickPendingIntent(R.id.widget_root, getLaunchIntent(context, ACTION_OPEN_TASK, current.id))
-            }
+        val actTitle = data.currentActivityTitle ?: data.currentTaskTitle
+        val actTime = data.currentActivityTime ?: data.currentTaskTime
+        if (!actTitle.isNullOrBlank()) {
+            views.setTextViewText(R.id.widget_activity_title, actTitle)
+            views.setTextViewText(R.id.widget_activity_time, actTime ?: "")
         } else {
-            views.setTextViewText(R.id.widget_small_status_badge, "PLAN")
-            views.setTextViewText(R.id.widget_small_current_title, "No tasks right now")
-            views.setTextViewText(R.id.widget_small_current_time, "Tap to open Timora")
+            views.setTextViewText(R.id.widget_activity_title, "No current activity")
+            views.setTextViewText(R.id.widget_activity_time, "Tap to open Timora")
         }
 
         return views
@@ -129,59 +175,43 @@ object TimoraWidgetProvider {
     // ─────────────────────────────────────────────────────────────────────────
     private fun buildMediumViews(context: Context, data: TimoraWidgetData): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.timora_widget_medium)
-        val (current, next) = data.resolveCurrentAndNext()
 
         // Root click -> Open Timora
         views.setOnClickPendingIntent(R.id.widget_root, getLaunchIntent(context, ACTION_OPEN_HOME))
 
-        // Focus Indicator
-        if (data.focusActive) {
-            views.setViewVisibility(R.id.widget_med_focus_indicator, View.VISIBLE)
-            val focusTitle = data.focusTitle ?: "Active Focus"
-            val mins = data.focusRemainingSeconds / 60
-            val secs = data.focusRemainingSeconds % 60
-            views.setTextViewText(R.id.widget_med_focus_indicator, "FOCUS ${mins}:${secs.toString().padStart(2, '0')}")
+        // Top-Right Notifications Button
+        views.setOnClickPendingIntent(R.id.widget_btn_notifications, getLaunchIntent(context, ACTION_OPEN_NOTIFICATIONS))
+        if (data.unreadNotificationsCount > 0) {
+            views.setViewVisibility(R.id.widget_notification_badge, View.VISIBLE)
+            views.setTextViewText(R.id.widget_notification_badge, "${data.unreadNotificationsCount}")
         } else {
-            views.setViewVisibility(R.id.widget_med_focus_indicator, View.GONE)
+            views.setViewVisibility(R.id.widget_notification_badge, View.GONE)
         }
 
-        // Tasks & Progress
-        views.setTextViewText(R.id.widget_med_tasks_count, "${data.completedTasksCount}/${data.totalTasksCount} Tasks")
-        views.setTextViewText(R.id.widget_med_progress_text, "${data.progressPercentage}%")
-        views.setProgressBar(R.id.widget_med_progress_bar, 100, data.progressPercentage, false)
-
-        // NOW Activity
-        if (current != null) {
-            views.setTextViewText(R.id.widget_med_status_badge, current.statusBadge)
-            views.setTextViewText(R.id.widget_med_current_title, current.title)
-            views.setTextViewText(R.id.widget_med_current_time, current.timeStr)
-            if (current.id.isNotBlank()) {
-                views.setOnClickPendingIntent(R.id.widget_med_current_container, getLaunchIntent(context, ACTION_OPEN_TASK, current.id))
-            }
+        // Current Activity
+        val actTitle = data.currentActivityTitle ?: data.currentTaskTitle
+        val actTime = data.currentActivityTime ?: data.currentTaskTime
+        if (!actTitle.isNullOrBlank()) {
+            views.setTextViewText(R.id.widget_activity_title, actTitle)
+            views.setTextViewText(R.id.widget_activity_time, actTime ?: "")
         } else {
-            views.setTextViewText(R.id.widget_med_status_badge, "READY")
-            views.setTextViewText(R.id.widget_med_current_title, "All clear right now")
-            views.setTextViewText(R.id.widget_med_current_time, "Tap to plan your day")
-            views.setOnClickPendingIntent(R.id.widget_med_current_container, getLaunchIntent(context, ACTION_OPEN_HOME))
+            views.setTextViewText(R.id.widget_activity_title, "No current activity")
+            views.setTextViewText(R.id.widget_activity_time, "All clear right now")
         }
 
-        // NEXT Activity
-        if (next != null) {
-            views.setTextViewText(R.id.widget_med_next_title, next.title)
-            views.setTextViewText(R.id.widget_med_next_time, next.timeStr)
-            if (next.id.isNotBlank()) {
-                views.setOnClickPendingIntent(R.id.widget_med_next_container, getLaunchIntent(context, ACTION_OPEN_TASK, next.id))
-            }
+        // ⭐ Goals Section
+        val goals = data.goals
+        if (goals.isNotEmpty()) {
+            views.setViewVisibility(R.id.widget_goals_empty, View.GONE)
+            views.setViewVisibility(R.id.widget_goal1_container, View.VISIBLE)
+            val g1 = goals[0]
+            views.setTextViewText(R.id.widget_goal1_title, g1.title)
+            views.setTextViewText(R.id.widget_goal1_percentage, "${g1.progressPercentage}%")
+            views.setProgressBar(R.id.widget_goal1_progress_bar, 100, g1.progressPercentage, false)
         } else {
-            views.setTextViewText(R.id.widget_med_next_title, "No upcoming tasks")
-            views.setTextViewText(R.id.widget_med_next_time, "Enjoy your flow")
-            views.setOnClickPendingIntent(R.id.widget_med_next_container, getLaunchIntent(context, ACTION_OPEN_HOME))
+            views.setViewVisibility(R.id.widget_goals_empty, View.VISIBLE)
+            views.setViewVisibility(R.id.widget_goal1_container, View.GONE)
         }
-
-        // Quick Action: Start Focus
-        val focusAction = if (data.focusActive) "View Focus" else "Start Focus"
-        views.setTextViewText(R.id.widget_med_btn_focus, focusAction)
-        views.setOnClickPendingIntent(R.id.widget_med_btn_focus, getLaunchIntent(context, ACTION_START_FOCUS))
 
         return views
     }
@@ -195,64 +225,84 @@ object TimoraWidgetProvider {
         // Root click -> Open Timora
         views.setOnClickPendingIntent(R.id.widget_root, getLaunchIntent(context, ACTION_OPEN_HOME))
 
-        // Progress & Task summary
-        views.setTextViewText(R.id.widget_large_progress_text, "${data.progressPercentage}%")
-        views.setProgressBar(R.id.widget_large_progress_bar, 100, data.progressPercentage, false)
-        views.setTextViewText(R.id.widget_large_tasks_summary, "${data.completedTasksCount}/${data.totalTasksCount} Tasks Completed")
-
-        val schedule = data.scheduleItems
-
-        if (schedule.isEmpty()) {
-            views.setViewVisibility(R.id.widget_large_item1, View.GONE)
-            views.setViewVisibility(R.id.widget_large_item2, View.GONE)
-            views.setViewVisibility(R.id.widget_large_item3, View.GONE)
-            views.setViewVisibility(R.id.widget_large_item4, View.GONE)
-            views.setViewVisibility(R.id.widget_large_empty_text, View.VISIBLE)
+        // 2. NOTIFICATIONS — TOP RIGHT CORNER
+        views.setOnClickPendingIntent(R.id.widget_btn_notifications, getLaunchIntent(context, ACTION_OPEN_NOTIFICATIONS))
+        if (data.unreadNotificationsCount > 0) {
+            views.setViewVisibility(R.id.widget_notification_badge, View.VISIBLE)
+            views.setTextViewText(R.id.widget_notification_badge, "${data.unreadNotificationsCount}")
         } else {
-            views.setViewVisibility(R.id.widget_large_empty_text, View.GONE)
+            views.setViewVisibility(R.id.widget_notification_badge, View.GONE)
+        }
 
-            val now = System.currentTimeMillis()
-            var currentIndex = schedule.indexOfFirst { now in it.startMillis..it.endMillis }
-            if (currentIndex == -1) {
-                currentIndex = schedule.indexOfFirst { now < it.startMillis }
+        // 3. CURRENT ACTIVITY
+        val actTitle = data.currentActivityTitle ?: data.currentTaskTitle
+        val actTime = data.currentActivityTime ?: data.currentTaskTime
+        if (!actTitle.isNullOrBlank()) {
+            views.setTextViewText(R.id.widget_activity_title, actTitle)
+            views.setTextViewText(R.id.widget_activity_time, actTime ?: "")
+        } else {
+            views.setTextViewText(R.id.widget_activity_title, "No current activity")
+            views.setTextViewText(R.id.widget_activity_time, "All clear right now")
+        }
+
+        // 4. TASKS
+        val tasks = data.tasks
+        val taskItemIds = listOf(
+            R.id.widget_task_item1,
+            R.id.widget_task_item2,
+            R.id.widget_task_item3
+        )
+
+        if (tasks.isEmpty()) {
+            views.setViewVisibility(R.id.widget_task_empty, View.VISIBLE)
+            for (id in taskItemIds) {
+                views.setViewVisibility(id, View.GONE)
             }
-            if (currentIndex == -1) {
-                currentIndex = (schedule.size - 1).coerceAtLeast(0)
-            }
-
-            // Window of up to 4 items around current
-            val startIndex = (currentIndex - 1).coerceAtLeast(0)
-            val window = schedule.drop(startIndex).take(4)
-
-            val itemLayouts = listOf(
-                Triple(R.id.widget_large_item1, R.id.widget_large_item1_title, R.id.widget_large_item1_time),
-                Triple(R.id.widget_large_item2, R.id.widget_large_item2_title, R.id.widget_large_item2_time),
-                Triple(R.id.widget_large_item3, R.id.widget_large_item3_title, R.id.widget_large_item3_time),
-                Triple(R.id.widget_large_item4, R.id.widget_large_item4_title, R.id.widget_large_item4_time),
-            )
-
-            for (i in 0 until 4) {
-                val (rowId, titleId, timeId) = itemLayouts[i]
-                if (i < window.size) {
-                    val item = window[i]
-                    views.setViewVisibility(rowId, View.VISIBLE)
-                    views.setTextViewText(titleId, item.title)
-                    views.setTextViewText(timeId, item.timeStr)
-
-                    if (item.id.isNotBlank()) {
-                        views.setOnClickPendingIntent(rowId, getLaunchIntent(context, ACTION_OPEN_TASK, item.id))
+        } else {
+            views.setViewVisibility(R.id.widget_task_empty, View.GONE)
+            for (i in taskItemIds.indices) {
+                val viewId = taskItemIds[i]
+                if (i < tasks.size) {
+                    val task = tasks[i]
+                    val box = if (task.isCompleted) "☑ " else "☐ "
+                    views.setViewVisibility(viewId, View.VISIBLE)
+                    views.setTextViewText(viewId, "$box${task.title}")
+                    if (task.id.isNotBlank()) {
+                        views.setOnClickPendingIntent(viewId, getLaunchIntent(context, ACTION_OPEN_TASK, task.id))
                     }
                 } else {
-                    views.setViewVisibility(rowId, View.GONE)
+                    views.setViewVisibility(viewId, View.GONE)
                 }
             }
         }
 
-        // Quick Action Buttons
-        val focusText = if (data.focusActive) "View Focus" else "Start Focus"
-        views.setTextViewText(R.id.widget_large_btn_focus, focusText)
-        views.setOnClickPendingIntent(R.id.widget_large_btn_focus, getLaunchIntent(context, ACTION_START_FOCUS))
-        views.setOnClickPendingIntent(R.id.widget_large_btn_open, getLaunchIntent(context, ACTION_OPEN_HOME))
+        // 5. ⭐ GOALS — MOST IMPORTANT / HIGHLIGHTED
+        val goals = data.goals
+        if (goals.isEmpty()) {
+            views.setViewVisibility(R.id.widget_goals_empty, View.VISIBLE)
+            views.setViewVisibility(R.id.widget_goal1_container, View.GONE)
+            views.setViewVisibility(R.id.widget_goal2_container, View.GONE)
+        } else {
+            views.setViewVisibility(R.id.widget_goals_empty, View.GONE)
+
+            // Goal 1
+            views.setViewVisibility(R.id.widget_goal1_container, View.VISIBLE)
+            val g1 = goals[0]
+            views.setTextViewText(R.id.widget_goal1_title, g1.title)
+            views.setTextViewText(R.id.widget_goal1_percentage, "${g1.progressPercentage}%")
+            views.setProgressBar(R.id.widget_goal1_progress_bar, 100, g1.progressPercentage, false)
+
+            // Goal 2
+            if (goals.size > 1) {
+                views.setViewVisibility(R.id.widget_goal2_container, View.VISIBLE)
+                val g2 = goals[1]
+                views.setTextViewText(R.id.widget_goal2_title, g2.title)
+                views.setTextViewText(R.id.widget_goal2_percentage, "${g2.progressPercentage}%")
+                views.setProgressBar(R.id.widget_goal2_progress_bar, 100, g2.progressPercentage, false)
+            } else {
+                views.setViewVisibility(R.id.widget_goal2_container, View.GONE)
+            }
+        }
 
         return views
     }

@@ -17,6 +17,7 @@ class AutopilotBannerWidget extends ConsumerWidget {
     final recommendationsAsync = ref.watch(recoveryRecommendationsProvider);
 
     return recommendationsAsync.when(
+      skipLoadingOnRefresh: true,
       data: (recommendations) {
         if (recommendations.isEmpty) {
           return const SizedBox.shrink();
@@ -84,10 +85,8 @@ class AutopilotBannerWidget extends ConsumerWidget {
                   IconButton(
                     icon: const Icon(Icons.close, size: 18),
                     visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      if (top.activity != null) {
-                        ref.read(missedTaskRecoveryServiceProvider).dismissMissed(top.activity!);
-                      }
+                    onPressed: () async {
+                      await ref.read(missedTaskRecoveryServiceProvider).skipMissedItem(top);
                     },
                   ),
                 ],
@@ -141,10 +140,8 @@ class AutopilotBannerWidget extends ConsumerWidget {
                       foregroundColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
                     child: const Text('Skip', style: TextStyle(fontSize: 13)),
-                    onPressed: () {
-                      if (top.activity != null) {
-                        ref.read(missedTaskRecoveryServiceProvider).dismissMissed(top.activity!);
-                      }
+                    onPressed: () async {
+                      await ref.read(missedTaskRecoveryServiceProvider).skipMissedItem(top);
                     },
                   ),
                 ],

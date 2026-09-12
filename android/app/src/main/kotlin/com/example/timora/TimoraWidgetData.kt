@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Calendar
 
 data class WidgetScheduleItem(
     val id: String,
@@ -12,6 +13,18 @@ data class WidgetScheduleItem(
     val startMillis: Long,
     val endMillis: Long,
     val isCompleted: Boolean
+)
+
+data class WidgetTaskItem(
+    val id: String,
+    val title: String,
+    val isCompleted: Boolean
+)
+
+data class WidgetGoalItem(
+    val id: String,
+    val title: String,
+    val progressPercentage: Int
 )
 
 data class TimoraWidgetData(
@@ -28,6 +41,12 @@ data class TimoraWidgetData(
     val focusTitle: String?,
     val focusRemainingSeconds: Int,
     val scheduleItems: List<WidgetScheduleItem>,
+    val unreadNotificationsCount: Int = 0,
+    val currentActivityTitle: String? = null,
+    val currentActivityTime: String? = null,
+    val isActivityRunning: Boolean = false,
+    val tasks: List<WidgetTaskItem> = emptyList(),
+    val goals: List<WidgetGoalItem> = emptyList(),
     val lastUpdatedMillis: Long
 ) {
     companion object {
@@ -63,7 +82,39 @@ data class TimoraWidgetData(
                     }
                 }
 
-                TimoraWidgetData(
+                val tasksList = mutableListOf<WidgetTaskItem>()
+                val tasksArray = obj.optJSONArray("tasks")
+                if (tasksArray != null) {
+                    for (i in 0 until tasksArray.length()) {
+                        val taskObj = tasksArray.getJSONObject(i)
+                        tasksList.add(
+                            WidgetTaskItem(
+                                id = taskObj.optString("id", ""),
+                                title = taskObj.optString("title", ""),
+                                isCompleted = taskObj.optBoolean("isCompleted", false)
+                            )
+                        )
+                    }
+                }
+
+                val goalsList = mutableListOf<WidgetGoalItem>()
+                val goalsArray = obj.optJSONArray("goals")
+                if (goalsArray != null) {
+                    for (i in 0 until goalsArray.length()) {
+                        val goalObj = goalsArray.getJSONObject(i)
+                        goalsList.add(
+                            WidgetGoalItem(
+                                id = goalObj.optString("id", ""),
+                                title = goalObj.optString("title", ""),
+                                progressPercentage = goalObj.optInt("progressPercentage", 0)
+                            )
+                        )
+                    }
+                }
+
+                val lastUpdated = obj.optLong("lastUpdatedMillis", System.currentTimeMillis())
+
+                val data = TimoraWidgetData(
                     currentTaskId = obj.optString("currentTaskId").takeIf { it.isNotBlank() },
                     currentTaskTitle = obj.optString("currentTaskTitle").takeIf { it.isNotBlank() },
                     currentTaskTime = obj.optString("currentTaskTime").takeIf { it.isNotBlank() },
@@ -77,8 +128,34 @@ data class TimoraWidgetData(
                     focusTitle = obj.optString("focusTitle").takeIf { it.isNotBlank() },
                     focusRemainingSeconds = obj.optInt("focusRemainingSeconds", 0),
                     scheduleItems = itemsList,
-                    lastUpdatedMillis = obj.optLong("lastUpdatedMillis", System.currentTimeMillis())
+                    unreadNotificationsCount = obj.optInt("unreadNotificationsCount", 0),
+                    currentActivityTitle = obj.optString("currentActivityTitle").takeIf { it.isNotBlank() },
+                    currentActivityTime = obj.optString("currentActivityTime").takeIf { it.isNotBlank() },
+                    isActivityRunning = obj.optBoolean("isActivityRunning", false),
+                    tasks = tasksList,
+                    goals = goalsList,
+                    lastUpdatedMillis = lastUpdated
                 )
+
+                // Date-change / Midnight check:
+                // If the data was updated on a previous calendar day and midnight has passed,
+                // do not show yesterday's expired tasks/schedule indefinitely.
+                val lastCal = Calendar.getInstance().apply { timeInMillis = lastUpdated }
+                val nowCal = Calendar.getInstance()
+                val isSameDay = lastCal.get(Calendar.YEAR) == nowCal.get(Calendar.YEAR) &&
+                        lastCal.get(Calendar.DAY_OF_YEAR) == nowCal.get(Calendar.DAY_OF_YEAR)
+
+                if (!isSameDay) {
+                    data.copy(
+                        currentActivityTitle = null,
+                        currentActivityTime = null,
+                        isActivityRunning = false,
+                        tasks = emptyList(),
+                        scheduleItems = emptyList()
+                    )
+                } else {
+                    data
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing widget data: ${e.message}")
                 defaultData()
@@ -105,14 +182,19 @@ data class TimoraWidgetData(
                 focusTitle = null,
                 focusRemainingSeconds = 0,
                 scheduleItems = emptyList(),
+                unreadNotificationsCount = 0,
+                currentActivityTitle = null,
+                currentActivityTime = null,
+                isActivityRunning = false,
+                tasks = emptyList(),
+                goals = emptyList(),
                 lastUpdatedMillis = System.currentTimeMillis()
             )
         }
     }
 
     /**
-     * Resolves the real-time "NOW" and "NEXT" activities based on current system time
-     * even when Flutter is closed.
+     * Resolves the real-time "NOW" and "NEXT" activities based on current system time.
      */
     fun resolveCurrentAndNext(): Pair<ResolvedActivity?, ResolvedActivity?> {
         val now = System.currentTimeMillis()
@@ -131,7 +213,15 @@ data class TimoraWidgetData(
             }
         }
 
-        if (current == null && currentTaskTitle != null) {
+        if (current == null && currentActivityTitle != null) {
+            current = ResolvedActivity(
+                currentTaskId ?: "",
+                currentActivityTitle,
+                currentActivityTime ?: "",
+                if (isActivityRunning) "NOW" else "PLAN",
+                false
+            )
+        } else if (current == null && currentTaskTitle != null) {
             current = ResolvedActivity(
                 currentTaskId ?: "",
                 currentTaskTitle,

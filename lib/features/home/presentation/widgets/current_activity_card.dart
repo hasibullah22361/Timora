@@ -114,6 +114,8 @@ class CurrentActivityCard extends ConsumerWidget {
 
     // Case 2: No active focus session; observe schedule activities
     return activityAsync.when(
+      skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
       loading: () => _buildCardContent(
         context: context,
         ref: ref,

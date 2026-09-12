@@ -1,35 +1,93 @@
 package com.example.timora
 
+import android.app.KeyguardManager
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
-import io.flutter.embedding.android.FlutterActivity
+import android.view.KeyEvent
+import android.view.WindowManager
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
 
     private lateinit var alarmPlugin: TimoraAlarmPlugin
+    private lateinit var clockAlarmPlugin: TimoraClockAlarmPlugin
     private lateinit var widgetPlugin: TimoraWidgetPlugin
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configureAlarmWindowFlags(intent)
         TimoraWidgetPlugin.handleIntent(intent)
+        TimoraAlarmPlugin.handleNotificationIntent(intent)
+        TimoraClockAlarmPlugin.handleIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        configureAlarmWindowFlags(intent)
         TimoraWidgetPlugin.handleIntent(intent)
+        TimoraAlarmPlugin.handleNotificationIntent(intent)
+        TimoraClockAlarmPlugin.handleIntent(intent)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val keyCode = event.keyCode
+            if (keyCode == KeyEvent.KEYCODE_POWER ||
+                keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
+                keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                if (TimoraClockAlarmService.isRinging()) {
+                    android.util.Log.d("MainActivity", "[TimoraClockAlarm] Key event $keyCode detected while ringing -> Silencing")
+                    TimoraClockAlarmService.silenceAlarm(this)
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun configureAlarmWindowFlags(intent: Intent?) {
+        val isRinging = intent?.getBooleanExtra("is_ringing", false) == true
+        if (isRinging) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                km?.requestDismissKeyguard(this, null)
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                )
+            }
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         alarmPlugin = TimoraAlarmPlugin(applicationContext)
-        MethodChannel(
+        val alarmChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             TimoraAlarmPlugin.CHANNEL
-        ).setMethodCallHandler(alarmPlugin)
+        )
+        alarmChannel.setMethodCallHandler(alarmPlugin)
+        TimoraAlarmPlugin.currentChannel = alarmChannel
+
+        clockAlarmPlugin = TimoraClockAlarmPlugin(applicationContext)
+        val clockAlarmChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            TimoraClockAlarmPlugin.CHANNEL
+        )
+        clockAlarmChannel.setMethodCallHandler(clockAlarmPlugin)
+        TimoraClockAlarmPlugin.currentChannel = clockAlarmChannel
 
         widgetPlugin = TimoraWidgetPlugin(applicationContext)
         val widgetChannel = MethodChannel(
@@ -176,7 +234,7 @@ class MainActivity : FlutterActivity() {
                 track.play()
                 audioTrack = track
                 isPlayingAudio = true
-            } catch (_: Exception) {}
+            } catch (e: Exception) {}
         }.start()
     }
 
@@ -184,14 +242,14 @@ class MainActivity : FlutterActivity() {
         try {
             audioTrack?.pause()
             isPlayingAudio = false
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
     }
 
     private fun resumeAmbientAudio() {
         try {
             audioTrack?.play()
             isPlayingAudio = true
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
     }
 
     private fun stopAmbientAudio() {
@@ -200,14 +258,14 @@ class MainActivity : FlutterActivity() {
             audioTrack?.release()
             audioTrack = null
             isPlayingAudio = false
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
     }
 
     private fun setAmbientVolume(volume: Float) {
         currentVolume = volume
         try {
             audioTrack?.setVolume(volume)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
     }
 
     override fun onDestroy() {

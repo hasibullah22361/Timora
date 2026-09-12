@@ -9,6 +9,12 @@ import 'package:timora/features/cloud_sync/data/models/cloud_models.dart';
 import 'package:timora/features/cloud_sync/data/repositories/sync_repository.dart';
 import 'package:timora/features/cloud_sync/services/sync_service.dart';
 import '../../../widget/services/widget_update_service.dart';
+import '../../../analytics/data/models/productivity_event_model.dart';
+import '../../../analytics/data/repositories/productivity_event_repository.dart';
+import '../../../analytics/services/insights_engine_service.dart';
+import '../../../analytics/services/consistency_score_service.dart';
+import '../../../analytics/services/report_generator_service.dart';
+import '../../../analytics/presentation/providers/analytics_provider.dart';
 
 final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
@@ -31,10 +37,12 @@ final scheduleActivitiesProvider = FutureProvider<List<ScheduleActivity>>((ref) 
   await notifController.syncScheduleNotifications(date);
   
   // Re-evaluate statuses based on current time
-  final currentTime = ref.watch(currentTimeProvider);
+  final currentTime = DateTime.now();
   
   return activities.map((activity) {
-    if (activity.status == ActivityStatus.completed || activity.status == ActivityStatus.skipped) {
+    if (activity.status == ActivityStatus.completed ||
+        activity.status == ActivityStatus.skipped ||
+        activity.status == ActivityStatus.replaced) {
       return activity;
     }
     
@@ -59,6 +67,15 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
     _ref.invalidate(scheduleActivitiesProvider);
     _ref.invalidate(dailyScheduleProvider);
     _ref.invalidate(scheduleActivitiesByDateProvider(date));
+    try {
+      _ref.invalidate(timoraInsightsProvider);
+      _ref.invalidate(todayTopInsightProvider);
+      _ref.invalidate(analyticsInsightsProvider);
+      _ref.invalidate(weeklyConsistencyScoreProvider);
+      _ref.invalidate(dailyReportProvider);
+      _ref.invalidate(weeklyReportProvider);
+      _ref.invalidate(monthlyReportProvider);
+    } catch (_) {}
     try {
       _ref.read(notificationControllerProvider).syncScheduleNotifications(date);
     } catch (_) {}
@@ -111,6 +128,32 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
       isOverridden: true,
     );
     await _repo.updateActivity(updated);
+
+    try {
+      final eventRepo = _ref.read(productivityEventRepositoryProvider);
+      await eventRepo.recordEvent(ProductivityEventModel(
+        eventType: ProductivityEventType.activityCompleted,
+        entityType: 'activity',
+        entityId: updated.id,
+        metadata: {
+          'title': updated.title,
+          'category': updated.category,
+          'routineBlockId': updated.routineBlockId,
+        },
+      ));
+      if (updated.routineBlockId != null) {
+        await eventRepo.recordEvent(ProductivityEventModel(
+          eventType: ProductivityEventType.routineCompleted,
+          entityType: 'routine_block',
+          entityId: updated.routineBlockId!,
+          metadata: {
+            'title': updated.title,
+            'category': updated.category,
+          },
+        ));
+      }
+    } catch (_) {}
+
     await _ref.read(syncRepositoryProvider).enqueueChange(
       entityType: 'schedule_activities',
       entityId: activity.id,
@@ -128,6 +171,21 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
       isOverridden: true,
     );
     await _repo.updateActivity(updated);
+
+    try {
+      final eventRepo = _ref.read(productivityEventRepositoryProvider);
+      await eventRepo.recordEvent(ProductivityEventModel(
+        eventType: ProductivityEventType.activityMissed,
+        entityType: 'activity',
+        entityId: updated.id,
+        metadata: {
+          'title': updated.title,
+          'category': updated.category,
+          'routineBlockId': updated.routineBlockId,
+        },
+      ));
+    } catch (_) {}
+
     await _ref.read(syncRepositoryProvider).enqueueChange(
       entityType: 'schedule_activities',
       entityId: activity.id,
@@ -145,6 +203,39 @@ class ScheduleNotifier extends StateNotifier<AsyncValue<void>> {
       operation: SyncOperation.update,
     );
     _notifyRelated(activity.date);
+  }
+
+  Future<void> replaceActivity({
+    required ScheduleActivity originalActivity,
+    required ScheduleActivity replacementActivity,
+  }) async {
+    await _repo.replaceActivity(
+      originalActivity: originalActivity,
+      replacementActivity: replacementActivity,
+    );
+    final notifController = _ref.read(notificationControllerProvider);
+    await notifController.cancelAllForActivity(originalActivity.id);
+
+    try {
+      final eventRepo = _ref.read(productivityEventRepositoryProvider);
+      await eventRepo.recordEvent(ProductivityEventModel(
+        eventType: ProductivityEventType.activityRescheduled,
+        entityType: 'activity',
+        entityId: originalActivity.id,
+        metadata: {
+          'originalId': originalActivity.id,
+          'originalTitle': originalActivity.title,
+          'replacementTitle': replacementActivity.title,
+        },
+      ));
+    } catch (_) {}
+
+    await _ref.read(syncRepositoryProvider).enqueueChange(
+      entityType: 'schedule_activities',
+      entityId: originalActivity.id,
+      operation: SyncOperation.update,
+    );
+    _notifyRelated(originalActivity.date);
   }
 }
 

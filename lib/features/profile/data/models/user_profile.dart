@@ -17,6 +17,8 @@ class UserProfile {
   final String routinePreference; // e.g. 'Time-blocking', 'Flexible Flow', 'Goal-driven'
   final bool notificationsEnabled;
   final ThemeMode themeMode;
+  final bool isSuspended;
+  final String? suspendedReason;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -37,6 +39,8 @@ class UserProfile {
     this.routinePreference = 'Time-blocking',
     this.notificationsEnabled = true,
     this.themeMode = ThemeMode.system,
+    this.isSuspended = false,
+    this.suspendedReason,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -73,6 +77,8 @@ class UserProfile {
     String? routinePreference,
     bool? notificationsEnabled,
     ThemeMode? themeMode,
+    bool? isSuspended,
+    String? suspendedReason,
     DateTime? updatedAt,
   }) {
     return UserProfile(
@@ -92,6 +98,8 @@ class UserProfile {
       routinePreference: routinePreference ?? this.routinePreference,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       themeMode: themeMode ?? this.themeMode,
+      isSuspended: isSuspended ?? this.isSuspended,
+      suspendedReason: suspendedReason ?? this.suspendedReason,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -115,6 +123,8 @@ class UserProfile {
       'routinePreference': routinePreference,
       'notificationsEnabled': notificationsEnabled,
       'themeMode': themeMode.name,
+      'is_suspended': isSuspended,
+      'suspended_reason': suspendedReason,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -171,6 +181,8 @@ class UserProfile {
       routinePreference: map['routine_preference'] as String? ?? 'Time-blocking',
       notificationsEnabled: map['notifications_enabled'] as bool? ?? true,
       themeMode: mode,
+      isSuspended: map['is_suspended'] == true,
+      suspendedReason: map['suspended_reason'] as String?,
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'] as String) ?? DateTime.now()
           : DateTime.now(),
@@ -216,6 +228,8 @@ class UserProfile {
       routinePreference: (json['routinePreference'] ?? json['routine_preference']) as String? ?? 'Time-blocking',
       notificationsEnabled: (json['notificationsEnabled'] ?? json['notifications_enabled']) as bool? ?? true,
       themeMode: mode,
+      isSuspended: json['isSuspended'] == true || json['is_suspended'] == true,
+      suspendedReason: (json['suspendedReason'] ?? json['suspended_reason']) as String?,
       createdAt: createdRaw != null
           ? (DateTime.tryParse(createdRaw.toString()) ?? DateTime.now())
           : DateTime.now(),

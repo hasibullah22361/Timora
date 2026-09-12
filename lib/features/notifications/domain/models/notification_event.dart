@@ -6,6 +6,11 @@ enum NotificationEventType {
   activityStart,
   activityEnd,
   nextDayPlan,
+  morningBrief,
+  dailyDebrief,
+  dailyRecap,
+  weeklyRecap,
+  monthlyRecap,
   testNotification,
 }
 
@@ -13,6 +18,7 @@ enum NotificationSourceType {
   task,
   routine,
   schedule,
+  recap,
   other,
 }
 

@@ -50,11 +50,27 @@ class ScheduleScreen extends ConsumerWidget {
             // Timeline Content
             Expanded(
               child: activitiesAsync.when(
+                skipLoadingOnRefresh: true,
+                skipLoadingOnReload: true,
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, stack) => Center(child: Text('Error: $error')),
                 data: (activities) {
                   if (activities.isEmpty) {
-                    return _buildEmptyState(context);
+                    return RefreshIndicator(
+                      onRefresh: () async {
+                        final date = ref.read(selectedDateProvider);
+                        ref.invalidate(scheduleActivitiesProvider);
+                        ref.invalidate(scheduleActivitiesByDateProvider(date));
+                        await ref.read(scheduleActivitiesProvider.future);
+                      },
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          const SizedBox(height: 60),
+                          _buildEmptyState(context),
+                        ],
+                      ),
+                    );
                   }
                   final conflicts = SmartReschedulingService.detectConflicts(activities);
 
@@ -110,8 +126,16 @@ class ScheduleScreen extends ConsumerWidget {
                         ),
                       ],
                       Expanded(
-                        child: ScheduleTimeline(
-                          activities: activities,
+                        child: RefreshIndicator(
+                          onRefresh: () async {
+                            final date = ref.read(selectedDateProvider);
+                            ref.invalidate(scheduleActivitiesProvider);
+                            ref.invalidate(scheduleActivitiesByDateProvider(date));
+                            await ref.read(scheduleActivitiesProvider.future);
+                          },
+                          child: ScheduleTimeline(
+                            activities: activities,
+                          ),
                         ),
                       ),
                     ],

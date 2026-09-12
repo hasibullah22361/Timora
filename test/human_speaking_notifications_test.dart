@@ -281,4 +281,61 @@ void main() {
       expect(speakCalls.last.arguments, 'Hey, your AI and Data Science study session starts at 9 AM.');
     });
   });
+
+  group('6. Speaking Notification Volume Control', () {
+    test('service.setVolume updates TTS volume immediately', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final repo = NotificationSettingsRepository(prefs);
+      final service = VoiceAnnouncementService(repo);
+
+      await service.setVolume(0.2);
+      final volCalls = ttsCalls.where((c) => c.method == 'setVolume').toList();
+      expect(volCalls, isNotEmpty);
+      expect(volCalls.last.arguments, 0.2);
+
+      await service.setVolume(0.5);
+      expect(ttsCalls.where((c) => c.method == 'setVolume').last.arguments, 0.5);
+
+      await service.setVolume(1.0);
+      expect(ttsCalls.where((c) => c.method == 'setVolume').last.arguments, 1.0);
+    });
+
+    test('Test speech applies configured volume (e.g. 30%, 100%)', () async {
+      SharedPreferences.setMockInitialValues({'speakingNotificationVolume': 0.3});
+      final prefs = await SharedPreferences.getInstance();
+      final repo = NotificationSettingsRepository(prefs);
+      final service = VoiceAnnouncementService(repo);
+
+      // Test with volume = 0.3
+      await service.speakSampleAnnouncement(volume: 0.3);
+      final volCalls30 = ttsCalls.where((c) => c.method == 'setVolume').toList();
+      expect(volCalls30, isNotEmpty);
+      expect(volCalls30.last.arguments, 0.3);
+
+      // Test with volume = 1.0
+      await service.speakSampleAnnouncement(volume: 1.0);
+      final volCalls100 = ttsCalls.where((c) => c.method == 'setVolume').toList();
+      expect(volCalls100.last.arguments, 1.0);
+    });
+
+    test('Speaking volume setting does not affect normal notification sound or alarm settings', () async {
+      SharedPreferences.setMockInitialValues({
+        'soundEnabled': true,
+        'vibrationEnabled': true,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final repo = NotificationSettingsRepository(prefs);
+
+      expect(repo.soundEnabled, isTrue);
+      expect(repo.vibrationEnabled, isTrue);
+
+      await repo.setSpeakingVolume(0.2);
+      expect(repo.speakingVolume, 0.2);
+
+      // Normal notifications sound and vibration remain unchanged
+      expect(repo.soundEnabled, isTrue, reason: 'Normal notification sound must NOT be affected');
+      expect(repo.vibrationEnabled, isTrue, reason: 'Normal notification vibration must NOT be affected');
+    });
+  });
 }

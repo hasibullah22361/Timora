@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/services/remote_config_service.dart';
 import '../data/models/cloud_models.dart';
 import '../data/providers/cloud_sync_provider.dart';
 import '../data/repositories/sync_repository.dart';
@@ -53,6 +54,7 @@ import '../../schedule/data/models/autopilot_action_model.dart';
 import '../../schedule/data/repositories/autopilot_action_repository.dart';
 import '../../analytics/data/models/productivity_event_model.dart';
 import '../../analytics/data/repositories/productivity_event_repository.dart';
+import '../../widget/services/widget_update_service.dart';
 import '../../analytics/services/productivity_event_service.dart';
 import '../../analytics/services/consistency_score_service.dart';
 import '../../analytics/services/report_generator_service.dart';
@@ -63,7 +65,8 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return service;
 });
 
-final globalSyncStatusProvider = StateProvider<SyncStatus>((ref) => SyncStatus.offline);
+final globalSyncStatusProvider =
+    StateProvider<SyncStatus>((ref) => SyncStatus.offline);
 
 class SyncService {
   final Ref _ref;
@@ -106,7 +109,7 @@ class SyncService {
     try {
       final client = Supabase.instance.client;
       _currentSubscribedUserId = userId;
-      
+
       _realtimeChannel = client.channel('public:timora_realtime_$userId');
       _realtimeChannel!
           .onPostgresChanges(
@@ -133,7 +136,8 @@ class SyncService {
   }
 
   void _handleRealtimeEvent(PostgresChangePayload payload) {
-    debugPrint('[Sync] Realtime change on table: ${payload.table}, triggering syncNow...');
+    debugPrint(
+        '[Sync] Realtime change on table: ${payload.table}, triggering syncNow...');
     syncNow();
   }
 
@@ -154,12 +158,14 @@ class SyncService {
   void _listenToConnectivity() {
     try {
       final connectivityService = _ref.read(connectivityServiceProvider);
-      _connectivitySubscription = connectivityService.statusStream.listen((status) {
+      _connectivitySubscription =
+          connectivityService.statusStream.listen((status) {
         if (status == ConnectivityStatus.online) {
           debugPrint('[Sync] Connection restored, triggering sync...');
           autoSync();
         } else {
-          _ref.read(globalSyncStatusProvider.notifier).state = SyncStatus.offline;
+          _ref.read(globalSyncStatusProvider.notifier).state =
+              SyncStatus.offline;
         }
       });
     } catch (e) {
@@ -180,18 +186,42 @@ class SyncService {
   }
 
   Future<void> syncNow() async {
+    int retries = 0;
+    while (_isSyncing && retries < 20) {
+      await Future.delayed(const Duration(milliseconds: 50));
+      retries++;
+    }
     if (_isSyncing) return;
     _isSyncing = true;
 
     final statusNotifier = _ref.read(globalSyncStatusProvider.notifier);
     statusNotifier.state = SyncStatus.syncing;
-    
+
     try {
       final provider = _ref.read(cloudSyncProvider);
       final user = await provider.getCurrentUser();
-      
+
       if (user == null || !user.syncEnabled) {
         statusNotifier.state = SyncStatus.offline;
+        _isSyncing = false;
+        return;
+      }
+
+      // Check if user account has been suspended by an administrator
+      final currentProfile = _ref.read(userProfileProvider);
+      if (currentProfile.isSuspended) {
+        debugPrint(
+            '[Sync] Account is suspended by administrator: ${currentProfile.suspendedReason}');
+        statusNotifier.state = SyncStatus.failed;
+        _isSyncing = false;
+        return;
+      }
+
+      // Check if global maintenance mode is enabled remotely
+      final remoteConfig = _ref.read(remoteConfigServiceProvider).currentConfig;
+      if (remoteConfig.maintenanceMode) {
+        debugPrint('[Sync] Cloud sync paused due to system maintenance mode');
+        statusNotifier.state = SyncStatus.synced;
         _isSyncing = false;
         return;
       }
@@ -201,7 +231,7 @@ class SyncService {
 
       await _pushChanges();
       await _pullChanges();
-      
+
       statusNotifier.state = SyncStatus.synced;
     } catch (e) {
       statusNotifier.state = SyncStatus.failed;
@@ -277,7 +307,7 @@ class SyncService {
   Future<void> _pushChanges() async {
     final syncRepo = _ref.read(syncRepositoryProvider);
     final provider = _ref.read(cloudSyncProvider);
-    
+
     final pending = await syncRepo.getPendingItems();
     if (pending.isEmpty) return;
 
@@ -297,7 +327,7 @@ class SyncService {
     });
 
     final payloads = <String, dynamic>{};
-    
+
     // Extract repositories
     final taskRepo = _ref.read(taskRepositoryProvider);
     final routineRepo = _ref.read(routineRepositoryProvider);
@@ -316,24 +346,62 @@ class SyncService {
     final autopilotRepo = _ref.read(autopilotActionRepositoryProvider);
     final eventRepo = _ref.read(productivityEventRepositoryProvider);
 
-    // Preload datasets for fast lookup
-    final tasks = await taskRepo.getTasks();
-    final subtasks = await taskRepo.getAllSubtasks();
-    final routines = await routineRepo.getAllRoutines();
-    final blocks = await routineRepo.getAllBlocks();
-    final activities = await scheduleRepo.getAllActivities();
-    final goals = await goalRepo.getGoals();
-    final milestones = await goalRepo.getAllMilestones();
-    final projects = await projectRepo.getProjects();
-    final profile = profileRepo.loadProfile();
-    final settings = settingsRepo.loadSettings();
-    final diaryEntries = await diaryRepo.getAllEntries();
-    final habits = await habitRepo.getHabits();
-    final careerRoadmaps = await careerRoadmapRepo.getRoadmaps();
-    final careerMilestones = await careerRoadmapRepo.getAllMilestones();
-    final careerDocuments = await careerDocRepo.getDocuments();
-    final autopilotActions = await autopilotRepo.getAllActions();
-    final productivityEvents = await eventRepo.getAllEvents();
+    // Collect entity types that require lookup payloads
+    final neededTypes = sortedPending
+        .where((item) => item.operation != SyncOperation.delete)
+        .map((item) => item.entityType)
+        .toSet();
+
+    // Preload ONLY required datasets for fast lookup, avoiding loading all 16 tables
+    final tasks = neededTypes.contains('tasks')
+        ? await taskRepo.getTasks()
+        : const <TaskModel>[];
+    final subtasks = neededTypes.contains('subtasks')
+        ? await taskRepo.getAllSubtasks()
+        : const <SubtaskModel>[];
+    final routines = neededTypes.contains('routines')
+        ? await routineRepo.getAllRoutines()
+        : const <Routine>[];
+    final blocks = neededTypes.contains('routine_blocks')
+        ? await routineRepo.getAllBlocks()
+        : const <RoutineBlock>[];
+    final activities = neededTypes.contains('schedule_activities')
+        ? await scheduleRepo.getAllActivities()
+        : const <ScheduleActivity>[];
+    final goals = neededTypes.contains('goals')
+        ? await goalRepo.getGoals()
+        : const <GoalModel>[];
+    final milestones = neededTypes.contains('milestones')
+        ? await goalRepo.getAllMilestones()
+        : const <MilestoneModel>[];
+    final projects = neededTypes.contains('projects')
+        ? await projectRepo.getProjects()
+        : const <ProjectModel>[];
+    final profile =
+        neededTypes.contains('user_profile') ? profileRepo.loadProfile() : null;
+    final settings =
+        neededTypes.contains('settings') ? settingsRepo.loadSettings() : null;
+    final diaryEntries = neededTypes.contains('diary_entries')
+        ? await diaryRepo.getAllEntries()
+        : const <DiaryEntryModel>[];
+    final habits = neededTypes.contains('habits')
+        ? await habitRepo.getHabits()
+        : const <HabitModel>[];
+    final careerRoadmaps = neededTypes.contains('career_roadmaps')
+        ? await careerRoadmapRepo.getRoadmaps()
+        : const <CareerRoadmapModel>[];
+    final careerMilestones = neededTypes.contains('career_milestones')
+        ? await careerRoadmapRepo.getAllMilestones()
+        : const <CareerMilestoneModel>[];
+    final careerDocuments = neededTypes.contains('career_documents')
+        ? await careerDocRepo.getDocuments()
+        : const <CareerDocumentModel>[];
+    final autopilotActions = neededTypes.contains('autopilot_actions')
+        ? await autopilotRepo.getAllActions()
+        : const <AutopilotActionModel>[];
+    final productivityEvents = neededTypes.contains('productivity_events')
+        ? await eventRepo.getAllEvents()
+        : const <ProductivityEventModel>[];
 
     for (var item in sortedPending) {
       if (item.operation == SyncOperation.delete) continue;
@@ -372,13 +440,14 @@ class SyncService {
           if (p != null) payloads[item.entityId] = p.toJson();
           break;
         case 'user_profile':
-          payloads[item.entityId] = profile.toJson();
+          if (profile != null) payloads[item.entityId] = profile.toJson();
           break;
         case 'settings':
-          payloads[item.entityId] = settings.toJson();
+          if (settings != null) payloads[item.entityId] = settings.toJson();
           break;
         case 'diary_entries':
-          final d = diaryEntries.where((x) => x.id == item.entityId).firstOrNull;
+          final d =
+              diaryEntries.where((x) => x.id == item.entityId).firstOrNull;
           if (d != null) payloads[item.entityId] = d.toJson();
           break;
         case 'habits':
@@ -407,23 +476,29 @@ class SyncService {
           if (mp != null) payloads[item.entityId] = mp.toJson();
           break;
         case 'career_roadmaps':
-          final rm = careerRoadmaps.where((x) => x.id == item.entityId).firstOrNull;
+          final rm =
+              careerRoadmaps.where((x) => x.id == item.entityId).firstOrNull;
           if (rm != null) payloads[item.entityId] = rm.toJson();
           break;
         case 'career_milestones':
-          final cm = careerMilestones.where((x) => x.id == item.entityId).firstOrNull;
+          final cm =
+              careerMilestones.where((x) => x.id == item.entityId).firstOrNull;
           if (cm != null) payloads[item.entityId] = cm.toJson();
           break;
         case 'career_documents':
-          final cd = careerDocuments.where((x) => x.id == item.entityId).firstOrNull;
+          final cd =
+              careerDocuments.where((x) => x.id == item.entityId).firstOrNull;
           if (cd != null) payloads[item.entityId] = cd.toJson();
           break;
         case 'autopilot_actions':
-          final aa = autopilotActions.where((x) => x.id == item.entityId).firstOrNull;
+          final aa =
+              autopilotActions.where((x) => x.id == item.entityId).firstOrNull;
           if (aa != null) payloads[item.entityId] = aa.toJson();
           break;
         case 'productivity_events':
-          final pe = productivityEvents.where((x) => x.id == item.entityId).firstOrNull;
+          final pe = productivityEvents
+              .where((x) => x.id == item.entityId)
+              .firstOrNull;
           if (pe != null) payloads[item.entityId] = pe.toJson();
           break;
       }
@@ -447,7 +522,7 @@ class SyncService {
     final provider = _ref.read(cloudSyncProvider);
     final syncRepo = _ref.read(syncRepositoryProvider);
     final changes = await provider.pullChanges(null);
-    
+
     if (changes.isEmpty) return;
 
     final taskRepo = _ref.read(taskRepositoryProvider);
@@ -490,13 +565,15 @@ class SyncService {
         final isDeleted = record['_deletedAt'] != null;
         final entityType = record['_entityType'] as String? ?? 'tasks';
         final serverUpdatedAt = record['_serverUpdatedAt'] != null
-            ? (DateTime.tryParse(record['_serverUpdatedAt'].toString()) ?? DateTime.now())
+            ? (DateTime.tryParse(record['_serverUpdatedAt'].toString()) ??
+                DateTime.now())
             : DateTime.now();
 
         final localMeta = await syncRepo.getMetadata(id);
 
         // Conflict Resolution: Last-Write-Wins
-        if (localMeta != null && localMeta.localUpdatedAt.isAfter(serverUpdatedAt)) {
+        if (localMeta != null &&
+            localMeta.localUpdatedAt.isAfter(serverUpdatedAt)) {
           // Local is newer. Ignore server change for now; it will push in next cycle.
           continue;
         }
@@ -726,41 +803,91 @@ class SyncService {
           deletedAt: isDeleted ? serverUpdatedAt : null,
         ));
       } catch (itemError) {
-        debugPrint('[Sync] Notice: failed to apply pulled record $id: $itemError');
+        debugPrint(
+            '[Sync] Notice: failed to apply pulled record $id: $itemError');
       }
     }
 
-    // Invalidate related Riverpod providers so the UI immediately refreshes everywhere
-    _ref.invalidate(allTasksProvider);
-    _ref.invalidate(todayTasksProvider);
-    _ref.invalidate(overdueTasksProvider);
-    _ref.invalidate(upcomingTasksProvider);
-    _ref.invalidate(routinesProvider);
-    _ref.invalidate(activeRoutineProvider);
-    _ref.invalidate(scheduleActivitiesProvider);
-    _ref.invalidate(dailyScheduleProvider);
-    _ref.invalidate(allGoalsProvider);
-    _ref.invalidate(activeGoalsProvider);
-    _ref.invalidate(allProjectsProvider);
-    _ref.invalidate(activeProjectsProvider);
-    _ref.invalidate(allHabitsProvider);
-    _ref.invalidate(allDiaryEntriesProvider);
-    _ref.invalidate(diaryEntryForSelectedDateProvider);
-    _ref.invalidate(diaryStreakStatsProvider);
-    _ref.invalidate(userProfileProvider);
-    _ref.invalidate(settingsProvider);
-    _ref.invalidate(dailyPlanRepositoryProvider);
-    _ref.invalidate(weeklyPlanRepositoryProvider);
-    _ref.invalidate(monthlyPlanRepositoryProvider);
-    _ref.invalidate(activeRoadmapProvider);
-    _ref.invalidate(allCareerDocumentsProvider);
-    _ref.invalidate(autopilotHistoryProvider);
-    _ref.invalidate(allProductivityEventsProvider);
-    _ref.invalidate(weeklyConsistencyScoreProvider);
-    _ref.invalidate(dailyReportProvider);
-    _ref.invalidate(weeklyReportProvider);
-    _ref.invalidate(monthlyReportProvider);
-    _ref.invalidate(whatShouldIDoNowProvider);
+    final pulledTypes =
+        changes.values.map((v) => v['_entityType'] as String?).toSet();
+
+    // Granular Riverpod provider invalidations: only invalidate providers
+    // for domain entities that were actually modified or pulled.
+    if (pulledTypes.contains('tasks') || pulledTypes.contains('subtasks')) {
+      _ref.invalidate(allTasksProvider);
+      _ref.invalidate(todayTasksProvider);
+      _ref.invalidate(overdueTasksProvider);
+      _ref.invalidate(upcomingTasksProvider);
+      _ref.invalidate(dailyReportProvider);
+      _ref.invalidate(weeklyReportProvider);
+      _ref.invalidate(monthlyReportProvider);
+      _ref.invalidate(whatShouldIDoNowProvider);
+    }
+    if (pulledTypes.contains('routines') ||
+        pulledTypes.contains('routine_blocks')) {
+      _ref.invalidate(routinesProvider);
+      _ref.invalidate(activeRoutineProvider);
+    }
+    if (pulledTypes.contains('schedule_activities')) {
+      _ref.invalidate(scheduleActivitiesProvider);
+      _ref.invalidate(dailyScheduleProvider);
+    }
+    if (pulledTypes.contains('goals') || pulledTypes.contains('milestones')) {
+      _ref.invalidate(allGoalsProvider);
+      _ref.invalidate(activeGoalsProvider);
+    }
+    if (pulledTypes.contains('projects')) {
+      _ref.invalidate(allProjectsProvider);
+      _ref.invalidate(activeProjectsProvider);
+    }
+    if (pulledTypes.contains('habits') || pulledTypes.contains('habit_logs')) {
+      _ref.invalidate(allHabitsProvider);
+    }
+    if (pulledTypes.contains('diary_entries')) {
+      _ref.invalidate(allDiaryEntriesProvider);
+      _ref.invalidate(diaryEntryForSelectedDateProvider);
+      _ref.invalidate(diaryStreakStatsProvider);
+    }
+    if (pulledTypes.contains('user_profile')) {
+      _ref.invalidate(userProfileProvider);
+    }
+    if (pulledTypes.contains('settings')) {
+      _ref.invalidate(settingsProvider);
+    }
+    if (pulledTypes.contains('daily_plans') ||
+        pulledTypes.contains('planned_task_blocks') ||
+        pulledTypes.contains('daily_plan_blocks')) {
+      _ref.invalidate(dailyPlanRepositoryProvider);
+    }
+    if (pulledTypes.contains('weekly_plans')) {
+      _ref.invalidate(weeklyPlanRepositoryProvider);
+    }
+    if (pulledTypes.contains('monthly_plans')) {
+      _ref.invalidate(monthlyPlanRepositoryProvider);
+    }
+    if (pulledTypes.contains('career_roadmaps') ||
+        pulledTypes.contains('career_milestones')) {
+      _ref.invalidate(activeRoadmapProvider);
+    }
+    if (pulledTypes.contains('career_documents')) {
+      _ref.invalidate(allCareerDocumentsProvider);
+    }
+    if (pulledTypes.contains('autopilot_actions')) {
+      _ref.invalidate(autopilotHistoryProvider);
+    }
+    if (pulledTypes.contains('productivity_events')) {
+      _ref.invalidate(allProductivityEventsProvider);
+      _ref.invalidate(weeklyConsistencyScoreProvider);
+    }
+
+    // Only trigger home widget update if relevant schedule/task/routine items changed
+    if (pulledTypes.contains('tasks') ||
+        pulledTypes.contains('subtasks') ||
+        pulledTypes.contains('routines') ||
+        pulledTypes.contains('routine_blocks') ||
+        pulledTypes.contains('schedule_activities')) {
+      _ref.read(widgetUpdateServiceProvider).updateWidgets();
+    }
   }
 
   /// Full restore: pulls all user data from Supabase on login/reinstall.
@@ -798,7 +925,8 @@ class SyncService {
       await _pushChanges();
 
       statusNotifier.state = SyncStatus.synced;
-      debugPrint('[Sync] Full restore completed successfully for user ${user.userId}');
+      debugPrint(
+          '[Sync] Full restore completed successfully for user ${user.userId}');
     } catch (e) {
       statusNotifier.state = SyncStatus.failed;
       debugPrint('[Sync] Full restore error: $e');

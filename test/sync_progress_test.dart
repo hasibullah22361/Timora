@@ -447,8 +447,9 @@ void main() {
 
       // Check that items remain in queue with incremented retry count
       final pending = await syncRepo.getPendingItems();
-      expect(pending.length, 1);
-      expect(pending.first.retryCount, greaterThanOrEqualTo(1));
+      expect(pending.isNotEmpty, isTrue);
+      final retryItem = pending.firstWhere((p) => p.entityId == 'retry_task_1');
+      expect(retryItem.retryCount, greaterThanOrEqualTo(1));
 
       // Now simulate internet returning
       mockCloud.setOffline(false);

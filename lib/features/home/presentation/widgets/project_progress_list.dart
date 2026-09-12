@@ -36,6 +36,8 @@ class ProjectProgressList extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         asyncProjects.when(
+          skipLoadingOnRefresh: true,
+          skipLoadingOnReload: true,
           data: (projects) {
             if (projects.isEmpty) {
               return const Padding(

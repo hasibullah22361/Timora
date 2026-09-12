@@ -28,6 +28,23 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
         const val CHANNEL_ID = "timora_voice_v2"
         const val CHANNEL_NAME = "Timora Voice Alerts"
         const val TAG = "TimoraAlarmPlugin"
+
+        var currentChannel: MethodChannel? = null
+        var pendingNotificationPayload: String? = null
+
+        fun handleNotificationIntent(intent: Intent?) {
+            if (intent == null) return
+            val payload = intent.getStringExtra("payload")
+            if (payload != null) {
+                pendingNotificationPayload = payload
+                currentChannel?.invokeMethod("onNotificationTapped", payload)
+            } else if (intent.getStringExtra("notification_type") == "recap") {
+                val recapType = intent.getStringExtra("recap_type") ?: "daily"
+                val json = """{"type":"recap","recapType":"$recapType"}"""
+                pendingNotificationPayload = json
+                currentChannel?.invokeMethod("onNotificationTapped", json)
+            }
+        }
     }
 
     init {
@@ -39,7 +56,7 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             try {
                 nm.deleteNotificationChannel("timora_voice")
-            } catch (_: Exception) {}
+            } catch (e: Exception) {}
 
             val channel = NotificationChannel(
                 CHANNEL_ID,
@@ -59,6 +76,12 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
             when (call.method) {
+                "getInitialNotification" -> {
+                    val p = pendingNotificationPayload
+                    pendingNotificationPayload = null
+                    result.success(p)
+                }
+
                 "syncEvents" -> {
                     val rawEvents = call.argument<List<Map<String, Any>>>("events")
                     if (rawEvents == null) {
@@ -132,7 +155,12 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
                         is String -> s.toFloatOrNull() ?: 1.0f
                         else -> 1.0f
                     }
-                    updateVoiceSettings(voiceGender, speed)
+                    val volume = when (val v = call.argument<Any>("volume")) {
+                        is Number -> v.toFloat()
+                        is String -> v.toFloatOrNull() ?: 1.0f
+                        else -> 1.0f
+                    }
+                    updateVoiceSettings(voiceGender, speed, volume)
                     result.success(null)
                 }
 
@@ -150,13 +178,14 @@ class TimoraAlarmPlugin(private val context: Context) : MethodChannel.MethodCall
         Log.d(TAG, "[TimoraAlarm] Spoken announcements setting synced: $enabled")
     }
 
-    fun updateVoiceSettings(voiceGender: String, speed: Float) {
+    fun updateVoiceSettings(voiceGender: String, speed: Float, volume: Float = 1.0f) {
         val prefs = context.getSharedPreferences(PREFS_EVENTS, Context.MODE_PRIVATE)
         prefs.edit()
             .putString("voiceGender", voiceGender)
             .putFloat("speakingSpeed", speed)
+            .putFloat("speakingVolume", volume)
             .apply()
-        Log.d(TAG, "[TimoraAlarm] Voice settings synced: gender=$voiceGender, speed=$speed")
+        Log.d(TAG, "[TimoraAlarm] Voice settings synced: gender=$voiceGender, speed=$speed, volume=$volume")
     }
 
 

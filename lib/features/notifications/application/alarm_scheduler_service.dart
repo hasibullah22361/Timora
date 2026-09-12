@@ -78,15 +78,20 @@ class AlarmSchedulerService {
     }
   }
 
-  /// Synchronize voice gender and speaking speed to Android native SharedPreferences.
-  Future<void> updateVoiceSettings({required String voiceGender, required double speed}) async {
+  /// Synchronize voice gender, speaking speed, and volume to Android native SharedPreferences.
+  Future<void> updateVoiceSettings({
+    required String voiceGender,
+    required double speed,
+    double? volume,
+  }) async {
     if (!_isAndroid) return;
     try {
       await _channel.invokeMethod('updateVoiceSettings', {
         'voiceGender': voiceGender,
         'speed': speed,
+        if (volume != null) 'volume': volume,
       });
-      debugPrint('[TimoraAlarm] updateVoiceSettings sent to Android: gender=$voiceGender, speed=$speed');
+      debugPrint('[TimoraAlarm] updateVoiceSettings sent to Android: gender=$voiceGender, speed=$speed, volume=$volume');
     } catch (e) {
       debugPrint('[TimoraAlarm] updateVoiceSettings error: $e');
     }

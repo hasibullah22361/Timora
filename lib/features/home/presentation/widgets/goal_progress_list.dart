@@ -36,6 +36,8 @@ class GoalProgressList extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         asyncGoals.when(
+          skipLoadingOnRefresh: true,
+          skipLoadingOnReload: true,
           data: (goals) {
             if (goals.isEmpty) {
               return const Padding(

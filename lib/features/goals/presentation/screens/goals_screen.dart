@@ -61,56 +61,77 @@ class GoalsScreen extends ConsumerWidget {
   Widget _buildGoalsList(WidgetRef ref, FutureProvider<List<GoalModel>> provider, String emptyMsg) {
     final asyncGoals = ref.watch(provider);
     
-    return asyncGoals.when(
-      data: (goals) {
-        if (goals.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.flag_outlined, size: 48, color: Color(0xFF10B981)),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No goals yet.',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Set a goal and start making progress.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.only(top: 16, bottom: 100),
-          itemCount: goals.length,
-          itemBuilder: (context, index) {
-            final goal = goals[index];
-            return GoalCard(
-              goal: goal,
-              onTap: () => Navigator.push(
-                context, 
-                MaterialPageRoute(builder: (_) => GoalDetailsScreen(goalId: goal.id))
-              ),
-            );
-          },
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(provider);
+        await ref.read(provider.future);
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      child: asyncGoals.when(
+        skipLoadingOnRefresh: true,
+        skipLoadingOnReload: true,
+        data: (goals) {
+          if (goals.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 80.0, left: 32.0, right: 32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.flag_outlined, size: 48, color: Color(0xFF10B981)),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No goals yet.',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Set a goal and start making progress.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
+          return ListView.builder(
+            key: PageStorageKey('goals_list_${provider.hashCode}'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(top: 16, bottom: 100),
+            itemCount: goals.length,
+            itemBuilder: (context, index) {
+              final goal = goals[index];
+              return GoalCard(
+                goal: goal,
+                onTap: () => Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (_) => GoalDetailsScreen(goalId: goal.id))
+                ),
+              );
+            },
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Center(child: Text('Error: $e')),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

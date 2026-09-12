@@ -7,6 +7,7 @@ import 'package:timora/features/schedule/data/models/schedule_activity.dart';
 import 'package:timora/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:timora/features/tasks/data/models/task_model.dart';
 import 'package:timora/features/tasks/presentation/providers/task_provider.dart';
+import 'package:timora/core/providers/shared_prefs_provider.dart';
 
 final currentTimeProvider = StateNotifierProvider<CurrentTimeNotifier, DateTime>((ref) {
   return CurrentTimeNotifier();
@@ -79,7 +80,9 @@ final currentActivityProvider = Provider<AsyncValue<ScheduleActivity?>>((ref) {
     try {
       final localNow = now.toLocal();
       return schedule.firstWhere((activity) {
-        if (activity.status == ActivityStatus.completed || activity.status == ActivityStatus.skipped) {
+        if (activity.status == ActivityStatus.completed ||
+            activity.status == ActivityStatus.skipped ||
+            activity.status == ActivityStatus.replaced) {
           return false;
         }
         final start = activity.startTime.isUtc
@@ -107,7 +110,9 @@ final nextActivityProvider = Provider<AsyncValue<ScheduleActivity?>>((ref) {
     try {
       final localNow = now.toLocal();
       return schedule.firstWhere((activity) {
-        if (activity.status == ActivityStatus.completed || activity.status == ActivityStatus.skipped) {
+        if (activity.status == ActivityStatus.completed ||
+            activity.status == ActivityStatus.skipped ||
+            activity.status == ActivityStatus.replaced) {
           return false;
         }
         final start = activity.startTime.isUtc
@@ -125,7 +130,10 @@ final nextActivityProvider = Provider<AsyncValue<ScheduleActivity?>>((ref) {
 /// Dynamically calculates unread/pending notification count from actual task reminders and overdue items
 final unreadNotificationsCountProvider = Provider<int>((ref) {
   final tasksAsync = ref.watch(allTasksProvider);
-  return tasksAsync.when(
+  final prefs = ref.watch(sharedPreferencesProvider);
+  final deletedSet = (prefs.getStringList('timora_deleted_inbox_ids') ?? []).toSet();
+
+  return tasksAsync.maybeWhen(
     data: (tasks) {
       final now = DateTime.now();
       int count = 0;
@@ -133,6 +141,12 @@ final unreadNotificationsCountProvider = Provider<int>((ref) {
         if (t.isCompleted || t.status == TaskStatus.cancelled || t.isDeleted) {
           continue;
         }
+        final overdueId = 'task_overdue_${t.id}';
+        final todayId = 'task_today_${t.id}';
+        if (deletedSet.contains(overdueId) || deletedSet.contains(todayId)) {
+          continue;
+        }
+
         if (t.isOverdue) {
           count++;
         } else if (t.dueDate != null &&
@@ -146,8 +160,7 @@ final unreadNotificationsCountProvider = Provider<int>((ref) {
       }
       return count;
     },
-    loading: () => 0,
-    error: (_, __) => 0,
+    orElse: () => 0,
   );
 });
 

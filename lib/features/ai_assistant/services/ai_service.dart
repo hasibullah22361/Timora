@@ -21,14 +21,21 @@ final aiMessagesProvider = StateNotifierProvider<AIMessagesNotifier, List<AIMess
 class AIMessagesNotifier extends StateNotifier<List<AIMessage>> {
   final Ref _ref;
   final _uuid = const Uuid();
+  bool _isGenerating = false;
+
+  bool get isGenerating => _isGenerating;
 
   AIMessagesNotifier(this._ref) : super([]);
 
   Future<void> sendMessage(String text) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty || _isGenerating) return;
+    _isGenerating = true;
+
     final userMessage = AIMessage(
       id: _uuid.v4(),
       role: AIMessageRole.user,
-      content: text,
+      content: cleanText,
       createdAt: DateTime.now(),
     );
     
@@ -40,7 +47,7 @@ class AIMessagesNotifier extends StateNotifier<List<AIMessage>> {
       
       final provider = _ref.read(aiProvider);
       final response = await provider.generateResponse(
-        prompt: text,
+        prompt: cleanText,
         contextContext: contextData,
         history: state,
       );
@@ -56,6 +63,8 @@ class AIMessagesNotifier extends StateNotifier<List<AIMessage>> {
           createdAt: DateTime.now(),
         )
       ];
+    } finally {
+      _isGenerating = false;
     }
   }
 

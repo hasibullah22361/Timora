@@ -37,6 +37,8 @@ class TodayTasksList extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         asyncTasks.when(
+          skipLoadingOnRefresh: true,
+          skipLoadingOnReload: true,
           data: (tasks) {
             if (tasks.isEmpty) {
               return const Padding(
@@ -61,6 +63,7 @@ class TodayTasksList extends ConsumerWidget {
     final isCompleted = task.status == TaskStatus.completed;
 
     return Container(
+      key: ValueKey(task.id),
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),

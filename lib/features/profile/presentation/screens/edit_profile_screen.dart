@@ -285,6 +285,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                         File(_customImagePath!),
                                         width: 96,
                                         height: 96,
+                                        cacheWidth: 250,
+                                        cacheHeight: 250,
                                         fit: BoxFit.cover,
                                       ),
                               )

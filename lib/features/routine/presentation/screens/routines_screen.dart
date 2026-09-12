@@ -67,92 +67,114 @@ class RoutinesScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         child: routinesAsync.when(
+          skipLoadingOnRefresh: true,
+          skipLoadingOnReload: true,
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stack) => Center(child: Text('Error: $error')),
           data: (routines) {
             if (routines.isEmpty) {
-              return _buildEmptyState(context, ref);
+              return RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(routinesProvider);
+                  await ref.read(routinesProvider.future);
+                },
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    const SizedBox(height: 60),
+                    _buildEmptyState(context, ref),
+                  ],
+                ),
+              );
             }
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: routines.length,
-              itemBuilder: (context, index) {
-                final routine = routines[index];
-                return Card(
-                  elevation: 0,
-                  color: isDark ? AppColors.cardDark : AppColors.cardLight,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: routine.enabled ? routine.color : (isDark ? AppColors.borderDark : AppColors.borderLight),
-                      width: routine.enabled ? 1.5 : 1.0,
-                    ),
-                  ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => RoutineDetailsScreen(routineId: routine.id)),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(routine.icon, style: const TextStyle(fontSize: 24)),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  routine.name,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              Switch(
-                                value: routine.enabled,
-                                activeThumbColor: routine.color,
-                                onChanged: (val) {
-                                  ref.read(routineNotifierProvider).updateRoutine(
-                                        routine.copyWith(enabled: val),
-                                      );
-                                },
-                              ),
-                            ],
-                          ),
-                          if (routine.description.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              routine.description,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Icon(Icons.calendar_today, size: 16, color: routine.color),
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatDays(routine.daysOfWeek),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+            return RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(routinesProvider);
+                await ref.read(routinesProvider.future);
+              },
+              child: ListView.builder(
+                key: const PageStorageKey('routines_list_scroll'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: routines.length,
+                itemBuilder: (context, index) {
+                  final routine = routines[index];
+                  return Card(
+                    elevation: 0,
+                    color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: routine.enabled ? routine.color : (isDark ? AppColors.borderDark : AppColors.borderLight),
+                        width: routine.enabled ? 1.5 : 1.0,
                       ),
                     ),
-                  ),
-                );
-              },
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => RoutineDetailsScreen(routineId: routine.id)),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(routine.icon, style: const TextStyle(fontSize: 24)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    routine.name,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Switch(
+                                  value: routine.enabled,
+                                  activeThumbColor: routine.color,
+                                  onChanged: (val) {
+                                    ref.read(routineNotifierProvider).updateRoutine(
+                                          routine.copyWith(enabled: val),
+                                        );
+                                  },
+                                ),
+                              ],
+                            ),
+                            if (routine.description.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                routine.description,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Icon(Icons.calendar_today, size: 16, color: routine.color),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _formatDays(routine.daysOfWeek),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             );
           },
         ),

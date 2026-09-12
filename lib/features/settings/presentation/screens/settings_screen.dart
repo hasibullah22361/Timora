@@ -7,6 +7,10 @@ import 'data_privacy_screen.dart';
 import 'package:timora/features/cloud_sync/presentation/screens/cloud_account_screen.dart';
 import 'package:timora/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:timora/features/focus/presentation/screens/focus_history_screen.dart';
+import 'package:timora/core/config/build_info.dart';
+import 'feature_audit_screen.dart';
+import 'security_settings_screen.dart';
+import '../../../ai_assistant/presentation/screens/ai_privacy_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -76,8 +80,15 @@ class SettingsScreen extends StatelessWidget {
                 MaterialPageRoute(
                     builder: (_) => const DashboardSettingsScreen()));
           }),
-          _buildSettingsTile(context, 'Notifications & Reminders',
+          _buildSettingsTile(context, 'Notifications & Spoken Announcements',
               Icons.notifications_outlined, () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const NotificationSettingsScreen()));
+          }),
+          _buildSettingsTile(context, 'AI Morning Brief & Daily Debrief',
+              Icons.wb_sunny_outlined, () {
             Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -91,22 +102,44 @@ class SettingsScreen extends StatelessWidget {
             );
           }),
           const Divider(),
-          _buildSectionHeader(context, 'Account'),
-          _buildSettingsTile(context, 'Cloud Account & Sync', Icons.cloud_sync,
+          _buildSectionHeader(context, 'Account & Privacy'),
+          _buildSettingsTile(
+              context, 'Security & App Lock', Icons.fingerprint_rounded, () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const SecuritySettingsScreen()));
+          }),
+          _buildSettingsTile(context, 'Cloud Backup & Sync', Icons.cloud_sync,
               () {
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const CloudAccountScreen()));
           }),
-          _buildSettingsTile(context, 'Data & Privacy', Icons.security, () {
+          _buildSettingsTile(context, 'Data Privacy', Icons.security, () {
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const DataPrivacyScreen()));
+          }),
+          _buildSettingsTile(context, 'Export & Import', Icons.import_export_rounded, () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const DataPrivacyScreen()));
+          }),
+          _buildSettingsTile(context, 'AI Privacy & Context', Icons.auto_awesome_outlined, () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AIPrivacySettingsScreen()));
+          }),
+          const Divider(),
+          _buildSectionHeader(context, 'Diagnostics & About'),
+          _buildSettingsTile(
+              context, 'Features Audit & Diagnostics', Icons.fact_check_outlined, () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const FeatureAuditScreen()));
           }),
           _buildSettingsTile(
               context, 'About Timora', Icons.info_outline, () {
             showAboutDialog(
               context: context,
-              applicationName: 'Timora',
-              applicationVersion: '1.0.0',
+              applicationName: BuildInfo.appName,
+              applicationVersion: BuildInfo.fullVersionString,
               applicationLegalese: 'Make Time Work for You.',
               applicationIcon: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -117,9 +150,35 @@ class SettingsScreen extends StatelessWidget {
                   errorBuilder: (_, __, ___) => const Icon(Icons.schedule_send_rounded, size: 48, color: Color(0xFF2563EB)),
                 ),
               ),
-              children: const [
-                Text(
+              children: [
+                const SizedBox(height: 12),
+                const Text(
                   'Timora is your all-in-one personal productivity and daily routine management assistant. Plan your days, master focus sessions, and accomplish your goals.',
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Build Number: ${BuildInfo.buildNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text('Feature Build Date: ${BuildInfo.featureBuildDate}', style: const TextStyle(fontSize: 12)),
+                      Text('Channel: ${BuildInfo.buildChannel}', style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const FeatureAuditScreen()));
+                  },
+                  icon: const Icon(Icons.fact_check_outlined, size: 16),
+                  label: const Text('Open Feature Audit Screen'),
                 ),
               ],
             );

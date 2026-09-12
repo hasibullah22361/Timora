@@ -78,25 +78,34 @@ class MonthlyPlanScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: _buildMonthSelector(context, ref, monthDate)),
-          SliverToBoxAdapter(
-            child: statsAsync.when(
-              data: (stats) => _buildSummary(context, stats),
-              loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const SizedBox.shrink(),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(monthlyStatsProvider(monthDate));
+          ref.invalidate(monthlyPlanProvider(monthDate));
+          await ref.read(monthlyStatsProvider(monthDate).future);
+        },
+        child: CustomScrollView(
+          key: const PageStorageKey('monthly_plan_scroll'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: _buildMonthSelector(context, ref, monthDate)),
+            SliverToBoxAdapter(
+              child: statsAsync.when(
+                data: (stats) => _buildSummary(context, stats),
+                loading: () => const LinearProgressIndicator(),
+                error: (_, __) => const SizedBox.shrink(),
+              ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            sliver: _buildCalendarHeader(theme),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.all(16.0),
-            sliver: _buildCalendarGrid(context, ref, monthDate),
-          ),
-        ],
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              sliver: _buildCalendarHeader(theme),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.all(16.0),
+              sliver: _buildCalendarGrid(context, ref, monthDate),
+            ),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {

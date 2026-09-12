@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/providers/shared_prefs_provider.dart';
 import '../data/models/autopilot_action_model.dart';
+import '../data/models/schedule_activity.dart';
 import '../data/repositories/autopilot_action_repository.dart';
+import '../../tasks/data/models/task_model.dart';
 import '../../settings/data/models/settings_models.dart';
 import '../../settings/presentation/providers/settings_provider.dart';
 import '../../notifications/application/voice_announcement_service.dart';
@@ -58,14 +62,60 @@ class TimoraAutopilotService {
         return;
       }
 
+      // 1. Deduplicated missed task notification generation
+      final now = DateTime.now();
+      final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      SharedPreferences? prefs;
+      try {
+        prefs = _ref.read(sharedPreferencesProvider);
+      } catch (_) {}
+      prefs ??= await SharedPreferences.getInstance();
+
+      final notifiedList = prefs.getStringList('timora_autopilot_notified_missed_ids') ?? [];
+      bool hasNewNotification = false;
+
+      for (final rec in recommendations) {
+        final entityId = rec.activity?.id ?? rec.task?.id;
+        if (entityId == null) continue;
+
+        // Verify task or activity is not completed or skipped
+        if (rec.activity != null) {
+          if (rec.activity!.status == ActivityStatus.completed || rec.activity!.status == ActivityStatus.skipped) {
+            continue;
+          }
+        } else if (rec.task != null) {
+          if (rec.task!.isCompleted || rec.task!.isDeleted || rec.task!.status == TaskStatus.cancelled) {
+            continue;
+          }
+        }
+
+        final dedupeKey = '${dateStr}_$entityId';
+        if (!notifiedList.contains(dedupeKey)) {
+          notifiedList.add(dedupeKey);
+          hasNewNotification = true;
+
+          if (rec.activity != null) {
+            await _ref.read(productivityEventServiceProvider).logActivityMissed(rec.activity!);
+          } else if (rec.task != null) {
+            await _ref.read(productivityEventServiceProvider).logTaskMissed(rec.task!);
+          }
+        }
+      }
+
+      if (hasNewNotification) {
+        await prefs.setStringList('timora_autopilot_notified_missed_ids', notifiedList);
+        _ref.invalidate(allProductivityEventsProvider);
+      }
+
+      // 2. Autopilot actions
       final autopilotRepo = _ref.read(autopilotActionRepositoryProvider);
 
       for (final rec in recommendations) {
-        if (rec.activity == null) continue;
-        final act = rec.activity!;
+        final entityId = rec.activity?.id ?? rec.task?.id;
+        if (entityId == null) continue;
 
         // Guard against moving tasks repeatedly (max 2 autopilot moves per entity)
-        final moveCount = await autopilotRepo.getActionCountForEntity(act.id);
+        final moveCount = await autopilotRepo.getActionCountForEntity(entityId);
         if (moveCount >= 2) {
           continue;
         }
@@ -77,13 +127,13 @@ class TimoraAutopilotService {
           // Record action in history
           final action = AutopilotActionModel(
             actionType: 'reschedule_missed',
-            entityId: act.id,
-            title: act.title,
-            originalStart: act.startTime,
-            originalEnd: act.endTime,
+            entityId: entityId,
+            title: rec.title,
+            originalStart: rec.originalStart,
+            originalEnd: rec.originalEnd,
             newStart: rec.proposedStart,
             newEnd: rec.proposedEnd,
-            reason: 'Autopilot detected missed "${act.title}" and found an open recovery slot.',
+            reason: 'Autopilot detected missed "${rec.title}" and found an open recovery slot.',
             status: AutopilotActionStatus.applied,
           );
           await autopilotRepo.recordAction(action);
@@ -91,8 +141,8 @@ class TimoraAutopilotService {
           // Log productivity event
           await _ref.read(productivityEventServiceProvider).logAutopilotAction(
                 actionType: 'reschedule_missed',
-                entityId: act.id,
-                title: act.title,
+                entityId: entityId,
+                title: rec.title,
                 reason: action.reason,
               );
 
@@ -101,14 +151,14 @@ class TimoraAutopilotService {
             final voice = _ref.read(voiceAnnouncementServiceProvider);
             voice.speakNotification(
               title: 'Timora Autopilot',
-              body: 'Moved "${act.title}" to ${_formatTime(rec.proposedStart)}.',
+              body: 'Moved "${rec.title}" to ${_formatTime(rec.proposedStart)}.',
             );
           } catch (_) {}
 
-          debugPrint('[Autopilot] Automatically rescheduled "${act.title}" to ${rec.proposedStart}');
+          debugPrint('[Autopilot] Automatically rescheduled "${rec.title}" to ${rec.proposedStart}');
         } else if (mode == AutopilotMode.assisted) {
           // In assisted mode, recommendations remain available in recoveryRecommendationsProvider
-          debugPrint('[Autopilot Assisted] Recommended recovery for "${act.title}" at ${rec.proposedStart}');
+          debugPrint('[Autopilot Assisted] Recommended recovery for "${rec.title}" at ${rec.proposedStart}');
         }
       }
     } catch (e) {

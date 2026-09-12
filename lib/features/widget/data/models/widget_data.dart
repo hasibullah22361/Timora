@@ -39,8 +39,63 @@ class WidgetScheduleItem {
   }
 }
 
+/// A single task item for the widget's compact Tasks section.
+class WidgetTaskItem {
+  final String id;
+  final String title;
+  final bool isCompleted;
+
+  const WidgetTaskItem({
+    required this.id,
+    required this.title,
+    required this.isCompleted,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'isCompleted': isCompleted,
+      };
+
+  factory WidgetTaskItem.fromJson(Map<String, dynamic> json) {
+    return WidgetTaskItem(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      isCompleted: json['isCompleted'] as bool? ?? false,
+    );
+  }
+}
+
+/// A single goal item for the widget's highlighted Goals section.
+class WidgetGoalItem {
+  final String id;
+  final String title;
+  final int progressPercentage;
+
+  const WidgetGoalItem({
+    required this.id,
+    required this.title,
+    required this.progressPercentage,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'progressPercentage': progressPercentage,
+      };
+
+  factory WidgetGoalItem.fromJson(Map<String, dynamic> json) {
+    return WidgetGoalItem(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      progressPercentage: (json['progressPercentage'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 /// Compact data payload passed to the Android home screen widgets.
 class WidgetData {
+  // Legacy fields (retained for backward compatibility)
   final String? currentTaskId;
   final String? currentTaskTitle;
   final String? currentTaskTime;
@@ -54,6 +109,15 @@ class WidgetData {
   final String? focusTitle;
   final int focusRemainingSeconds;
   final List<WidgetScheduleItem> scheduleItems;
+
+  // New fields for updated Home Screen Widget hierarchy
+  final int unreadNotificationsCount;
+  final String? currentActivityTitle;
+  final String? currentActivityTime;
+  final bool isActivityRunning;
+  final List<WidgetTaskItem> tasks;
+  final List<WidgetGoalItem> goals;
+
   final int lastUpdatedMillis;
 
   const WidgetData({
@@ -70,6 +134,12 @@ class WidgetData {
     this.focusTitle,
     this.focusRemainingSeconds = 0,
     this.scheduleItems = const [],
+    this.unreadNotificationsCount = 0,
+    this.currentActivityTitle,
+    this.currentActivityTime,
+    this.isActivityRunning = false,
+    this.tasks = const [],
+    this.goals = const [],
     required this.lastUpdatedMillis,
   });
 
@@ -87,6 +157,12 @@ class WidgetData {
         'focusTitle': focusTitle ?? '',
         'focusRemainingSeconds': focusRemainingSeconds,
         'scheduleItems': scheduleItems.map((e) => e.toJson()).toList(),
+        'unreadNotificationsCount': unreadNotificationsCount,
+        'currentActivityTitle': currentActivityTitle ?? '',
+        'currentActivityTime': currentActivityTime ?? '',
+        'isActivityRunning': isActivityRunning,
+        'tasks': tasks.map((e) => e.toJson()).toList(),
+        'goals': goals.map((e) => e.toJson()).toList(),
         'lastUpdatedMillis': lastUpdatedMillis,
       };
 
@@ -95,6 +171,16 @@ class WidgetData {
   factory WidgetData.fromJson(Map<String, dynamic> json) {
     final list = (json['scheduleItems'] as List<dynamic>?)
             ?.map((e) => WidgetScheduleItem.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    final taskList = (json['tasks'] as List<dynamic>?)
+            ?.map((e) => WidgetTaskItem.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    final goalList = (json['goals'] as List<dynamic>?)
+            ?.map((e) => WidgetGoalItem.fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];
 
@@ -112,8 +198,18 @@ class WidgetData {
       focusTitle: json['focusTitle'] as String?,
       focusRemainingSeconds: (json['focusRemainingSeconds'] as num?)?.toInt() ?? 0,
       scheduleItems: list,
+      unreadNotificationsCount: (json['unreadNotificationsCount'] as num?)?.toInt() ?? 0,
+      currentActivityTitle: (json['currentActivityTitle'] as String?)?.takeIfNotEmpty,
+      currentActivityTime: (json['currentActivityTime'] as String?)?.takeIfNotEmpty,
+      isActivityRunning: json['isActivityRunning'] as bool? ?? false,
+      tasks: taskList,
+      goals: goalList,
       lastUpdatedMillis: (json['lastUpdatedMillis'] as num?)?.toInt() ??
           DateTime.now().millisecondsSinceEpoch,
     );
   }
+}
+
+extension on String {
+  String? get takeIfNotEmpty => trim().isNotEmpty ? this : null;
 }

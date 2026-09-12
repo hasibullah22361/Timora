@@ -11,7 +11,10 @@ class AppTheme {
   static const Color surfaceColorLight = AppTokens.surfaceLight;
   static const Color surfaceColorDark = AppTokens.surfaceDark;
 
-  static ThemeData get lightTheme {
+  static ThemeData? _cachedLightTheme;
+  static ThemeData get lightTheme => _cachedLightTheme ??= _buildLightTheme();
+
+  static ThemeData _buildLightTheme() {
     final baseTextTheme = GoogleFonts.interTextTheme(ThemeData.light().textTheme);
     
     return ThemeData(
@@ -205,7 +208,10 @@ class AppTheme {
     );
   }
 
-  static ThemeData get darkTheme {
+  static ThemeData? _cachedDarkTheme;
+  static ThemeData get darkTheme => _cachedDarkTheme ??= _buildDarkTheme();
+
+  static ThemeData _buildDarkTheme() {
     final baseTextTheme = GoogleFonts.interTextTheme(ThemeData.dark().textTheme);
     
     return ThemeData(

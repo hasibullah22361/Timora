@@ -13,6 +13,8 @@ class NextActivityCard extends ConsumerWidget {
     final activityAsync = ref.watch(nextActivityProvider);
 
     return activityAsync.when(
+      skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
       loading: () => _buildContent(
         context: context,
         title: 'Loading next activity...',

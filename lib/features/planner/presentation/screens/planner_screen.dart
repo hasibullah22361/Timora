@@ -5,6 +5,8 @@ import 'package:timora/features/daily_plan/presentation/screens/daily_plan_scree
 import 'package:timora/features/weekly_plan/presentation/screens/weekly_plan_screen.dart';
 import 'package:timora/features/monthly_plan/presentation/screens/monthly_plan_screen.dart';
 import 'package:timora/features/routine/presentation/screens/routine_templates_screen.dart';
+import 'package:timora/core/widgets/timora_banner_ad.dart';
+import 'package:timora/features/ai_assistant/presentation/widgets/quick_voice_note_sheet.dart';
 
 class PlannerScreen extends ConsumerStatefulWidget {
   const PlannerScreen({super.key});
@@ -13,7 +15,8 @@ class PlannerScreen extends ConsumerStatefulWidget {
   ConsumerState<PlannerScreen> createState() => _PlannerScreenState();
 }
 
-class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTickerProviderStateMixin {
+class _PlannerScreenState extends ConsumerState<PlannerScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -27,7 +30,8 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
     );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
-        ref.read(activePlannerTabProvider.notifier).state = PlannerTab.values[_tabController.index];
+        ref.read(activePlannerTabProvider.notifier).state =
+            PlannerTab.values[_tabController.index];
       }
     });
   }
@@ -50,19 +54,27 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Planner', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Smart Planner',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.mic, color: Color(0xFF6366F1)),
+            tooltip: 'Quick Voice Note',
+            onPressed: () => QuickVoiceNoteSheet.show(context),
+          ),
           TextButton.icon(
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const RoutineTemplatesScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const RoutineTemplatesScreen()),
               );
             },
             icon: const Icon(Icons.auto_awesome, size: 18),
-            label: const Text('Templates', style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text('Templates',
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
           const SizedBox(width: 8),
         ],
@@ -73,7 +85,8 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
             child: Container(
               height: 44,
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
@@ -91,8 +104,10 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
                   ],
                 ),
                 labelColor: theme.colorScheme.onPrimary,
-                unselectedLabelColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                unselectedLabelColor:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                labelStyle:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 dividerColor: Colors.transparent,
                 tabs: const [
                   Tab(
@@ -100,9 +115,9 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.today, size: 16),
-                        SizedBox(width: 6),
-                        Text('Daily'),
+                        Icon(Icons.today, size: 15),
+                        SizedBox(width: 4),
+                        Text('Daily & Agenda'),
                       ],
                     ),
                   ),
@@ -111,9 +126,9 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.view_week, size: 16),
-                        SizedBox(width: 6),
-                        Text('Weekly'),
+                        Icon(Icons.view_week_outlined, size: 15),
+                        SizedBox(width: 4),
+                        Text('Weekly Overview'),
                       ],
                     ),
                   ),
@@ -122,9 +137,9 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.calendar_month, size: 16),
-                        SizedBox(width: 6),
-                        Text('Monthly'),
+                        Icon(Icons.calendar_month_outlined, size: 15),
+                        SizedBox(width: 4),
+                        Text('Monthly Calendar'),
                       ],
                     ),
                   ),
@@ -134,12 +149,24 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> with SingleTicker
           ),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          DailyPlanScreen(),
-          WeeklyPlanScreen(),
-          MonthlyPlanScreen(),
+      body: Column(
+        children: [
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: const [
+                DailyPlanScreen(),
+                WeeklyPlanScreen(),
+                MonthlyPlanScreen(),
+              ],
+            ),
+          ),
+          const SafeArea(
+            top: false,
+            child: TimoraBannerAd(
+              margin: EdgeInsets.only(top: 6, bottom: 8, left: 16, right: 16),
+            ),
+          ),
         ],
       ),
     );

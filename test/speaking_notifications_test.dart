@@ -53,6 +53,75 @@ void main() {
       final reloadedRepo = NotificationSettingsRepository(prefs);
       expect(reloadedRepo.spokenAnnouncementsEnabled, isTrue);
     });
+
+    test('Speaking volume defaults to 1.0 (100%)', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final repo = NotificationSettingsRepository(prefs);
+
+      expect(repo.speakingVolume, 1.0);
+    });
+
+    test('Speaking volume updates and persists across repository reload (app close/reopen)', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final repo = NotificationSettingsRepository(prefs);
+
+      // Set to 20%
+      await repo.setSpeakingVolume(0.2);
+      expect(repo.speakingVolume, 0.2);
+
+      // Reload repo (simulating app reopen)
+      var reloadedRepo = NotificationSettingsRepository(prefs);
+      expect(reloadedRepo.speakingVolume, 0.2);
+
+      // Set to 50%
+      await repo.setSpeakingVolume(0.5);
+      expect(repo.speakingVolume, 0.5);
+      reloadedRepo = NotificationSettingsRepository(prefs);
+      expect(reloadedRepo.speakingVolume, 0.5);
+
+      // Set to 70%
+      await repo.setSpeakingVolume(0.7);
+      expect(repo.speakingVolume, 0.7);
+      reloadedRepo = NotificationSettingsRepository(prefs);
+      expect(reloadedRepo.speakingVolume, 0.7);
+
+      // Set to 100%
+      await repo.setSpeakingVolume(1.0);
+      expect(repo.speakingVolume, 1.0);
+      reloadedRepo = NotificationSettingsRepository(prefs);
+      expect(reloadedRepo.speakingVolume, 1.0);
+    });
+
+    test('Speaking volume clamps out-of-range values between 0.0 and 1.0', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final repo = NotificationSettingsRepository(prefs);
+
+      await repo.setSpeakingVolume(-0.25);
+      expect(repo.speakingVolume, 0.0);
+
+      await repo.setSpeakingVolume(1.5);
+      expect(repo.speakingVolume, 1.0);
+    });
+
+    test('Changing speaking volume does not affect voice gender or speaking speed', () async {
+      SharedPreferences.setMockInitialValues({
+        'notificationVoiceGender': 'male',
+        'speakingSpeed': 1.2,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final repo = NotificationSettingsRepository(prefs);
+
+      expect(repo.voiceGender, 'male');
+      expect(repo.speakingSpeed, 1.2);
+
+      await repo.setSpeakingVolume(0.3);
+      expect(repo.speakingVolume, 0.3);
+      expect(repo.voiceGender, 'male', reason: 'Male/Female voice functionality must remain intact');
+      expect(repo.speakingSpeed, 1.2, reason: 'Speaking speed must remain intact');
+    });
   });
 
   group('Phase 3, 13 & 30: Spoken Phrase Formatting and Sanitization', () {

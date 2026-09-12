@@ -42,6 +42,49 @@ class RoutineTemplate {
     required this.blocks,
   });
 
+  factory RoutineTemplate.fromSupabase(Map<String, dynamic> map) {
+    Color parseColor(dynamic c) {
+      if (c is int) return Color(c);
+      if (c is String) {
+        final hex = c.replaceFirst('#', '').replaceAll('0x', '');
+        return Color(int.tryParse(hex.length == 6 ? 'FF$hex' : hex, radix: 16) ?? 0xFF3B82F6);
+      }
+      return const Color(0xFF3B82F6);
+    }
+
+    final rawBlocks = map['blocks'] as List<dynamic>? ?? [];
+    final parsedBlocks = rawBlocks.map((b) {
+      final bMap = Map<String, dynamic>.from(b as Map);
+      final startH = bMap['start_hour'] as int? ?? 8;
+      final startM = bMap['start_minute'] as int? ?? 0;
+      final endH = bMap['end_hour'] as int? ?? 9;
+      final endM = bMap['end_minute'] as int? ?? 0;
+
+      return RoutineTemplateBlockData(
+        title: bMap['title'] as String? ?? 'Activity',
+        description: bMap['description'] as String? ?? '',
+        startTime: TimeOfDay(hour: startH, minute: startM),
+        endTime: TimeOfDay(hour: endH, minute: endM),
+        category: bMap['category'] as String? ?? 'Personal',
+        icon: bMap['icon'] as String? ?? '⚡',
+        color: parseColor(bMap['color']),
+      );
+    }).toList();
+
+    final defaultDaysRaw = map['default_days'] as List<dynamic>? ?? [1, 2, 3, 4, 5];
+    final defaultDays = defaultDaysRaw.map((d) => d is int ? d : int.tryParse(d.toString()) ?? 1).toList();
+
+    return RoutineTemplate(
+      id: map['id'] as String? ?? const Uuid().v4(),
+      title: map['title'] as String? ?? 'Custom Routine',
+      description: map['description'] as String? ?? '',
+      icon: map['icon'] as String? ?? '📅',
+      color: parseColor(map['color']),
+      defaultDays: defaultDays,
+      blocks: parsedBlocks,
+    );
+  }
+
   Routine instantiateRoutine(String routineId) {
     return Routine(
       id: routineId,

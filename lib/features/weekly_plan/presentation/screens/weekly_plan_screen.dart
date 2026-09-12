@@ -95,13 +95,19 @@ class WeeklyPlanScreen extends ConsumerWidget {
           ),
           
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(24),
-              itemCount: 7,
-              itemBuilder: (ctx, index) {
-                final date = weekStart.add(Duration(days: index));
-                return _buildDayCard(context, ref, date);
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(weeklyStatsProvider(weekStart));
+                ref.invalidate(weeklyPlanProvider(weekStart));
+                await ref.read(weeklyStatsProvider(weekStart).future);
               },
+              child: ListView.builder(
+                key: const PageStorageKey('weekly_plan_list'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                itemCount: 7,
+                itemBuilder: (ctx, i) => _buildDayCard(context, ref, weekStart.add(Duration(days: i))),
+              ),
             ),
           ),
         ],

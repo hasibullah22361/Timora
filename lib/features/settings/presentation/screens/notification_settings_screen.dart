@@ -7,6 +7,8 @@ import '../../../notifications/application/engine/platform_notification_factory.
 import '../../../notifications/application/alarm_scheduler_service.dart';
 import '../../../notifications/application/notification_event_engine.dart';
 import '../../../notifications/application/voice_announcement_service.dart';
+import '../../../recap/application/recap_scheduler_service.dart';
+import '../../../recap/domain/models/recap_models.dart';
 
 class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -239,6 +241,265 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
           ),
 
           const Divider(),
+          _buildSectionHeader(context, 'AI MORNING BRIEF & DAILY DEBRIEF'),
+
+          SwitchListTile(
+            title: const Text('Morning Brief', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Row(
+              children: [
+                Text(repo.morningBriefTime.format(context)),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    final t = await showTimePicker(context: context, initialTime: repo.morningBriefTime);
+                    if (t != null) {
+                      repo.setMorningBriefTime(t);
+                      setState(() {});
+                    }
+                  },
+                  child: const Text('(Change)', style: TextStyle(color: Colors.blue, fontSize: 12)),
+                ),
+              ],
+            ),
+            value: repo.morningBriefEnabled,
+            onChanged: (val) {
+              repo.setMorningBriefEnabled(val);
+              setState(() {});
+            },
+          ),
+          if (repo.morningBriefEnabled) ...[
+            ListTile(
+              title: const Text('Briefing Duration'),
+              subtitle: Text(
+                repo.morningBriefDuration == 'short'
+                    ? 'Short — Priorities & first activity'
+                    : (repo.morningBriefDuration == 'detailed'
+                        ? 'Detailed — Full schedule, focus & recommendations'
+                        : 'Normal — Priorities, schedule & focus block'),
+              ),
+              trailing: const Icon(Icons.timer_outlined),
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Briefing Duration'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        RadioListTile<String>(
+                          title: const Text('Short'),
+                          subtitle: const Text('Top priorities & first activity only'),
+                          value: 'short',
+                          groupValue: repo.morningBriefDuration,
+                          onChanged: (val) {
+                            if (val != null) {
+                              repo.setMorningBriefDuration(val);
+                              setState(() {});
+                            }
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                        RadioListTile<String>(
+                          title: const Text('Normal (Default)'),
+                          subtitle: const Text('Priorities, key tasks & first focus session'),
+                          value: 'normal',
+                          groupValue: repo.morningBriefDuration,
+                          onChanged: (val) {
+                            if (val != null) {
+                              repo.setMorningBriefDuration(val);
+                              setState(() {});
+                            }
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                        RadioListTile<String>(
+                          title: const Text('Detailed'),
+                          subtitle: const Text('Priorities, timeline, deadlines & suggestions'),
+                          value: 'detailed',
+                          groupValue: repo.morningBriefDuration,
+                          onChanged: (val) {
+                            if (val != null) {
+                              repo.setMorningBriefDuration(val);
+                              setState(() {});
+                            }
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      avatar: const Icon(Icons.man_rounded, size: 16),
+                      label: const Text('Male Voice'),
+                      selected: repo.morningBriefVoiceGender == 'male',
+                      onSelected: (selected) async {
+                        if (selected) {
+                          await repo.setMorningBriefVoiceGender('male');
+                          setState(() {});
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ChoiceChip(
+                      avatar: const Icon(Icons.woman_rounded, size: 16),
+                      label: const Text('Female Voice'),
+                      selected: repo.morningBriefVoiceGender == 'female',
+                      onSelected: (selected) async {
+                        if (selected) {
+                          await repo.setMorningBriefVoiceGender('female');
+                          setState(() {});
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SwitchListTile(
+              title: const Text('Play Automatically'),
+              subtitle: const Text('Speak morning brief when notification fires (if not muted)'),
+              value: repo.morningBriefAutoPlay,
+              onChanged: (val) {
+                repo.setMorningBriefAutoPlay(val);
+                setState(() {});
+              },
+            ),
+          ],
+          SwitchListTile(
+            title: const Text('Daily Debrief', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Row(
+              children: [
+                Text(repo.dailyDebriefTime.format(context)),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    final t = await showTimePicker(context: context, initialTime: repo.dailyDebriefTime);
+                    if (t != null) {
+                      repo.setDailyDebriefTime(t);
+                      setState(() {});
+                    }
+                  },
+                  child: const Text('(Change)', style: TextStyle(color: Colors.blue, fontSize: 12)),
+                ),
+              ],
+            ),
+            value: repo.dailyDebriefEnabled,
+            onChanged: (val) {
+              repo.setDailyDebriefEnabled(val);
+              setState(() {});
+            },
+          ),
+
+          const Divider(),
+          _buildSectionHeader(context, 'AI RECAP SCHEDULING & SPOKEN ANNOUNCEMENTS'),
+
+          // 1. Daily Recap
+          SwitchListTile(
+            title: const Text('AI Daily Recap Notification', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Row(
+              children: [
+                Text(repo.dailyRecapTime.format(context)),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    final t = await showTimePicker(context: context, initialTime: repo.dailyRecapTime);
+                    if (t != null) {
+                      await repo.setDailyRecapTime(t);
+                      await ref.read(recapSchedulerServiceProvider).syncRecapAlarms();
+                      setState(() {});
+                    }
+                  },
+                  child: const Text('(Change)', style: TextStyle(color: Colors.blue, fontSize: 12)),
+                ),
+              ],
+            ),
+            value: repo.dailyRecapEnabled,
+            onChanged: (val) async {
+              await repo.setDailyRecapEnabled(val);
+              await ref.read(recapSchedulerServiceProvider).syncRecapAlarms();
+              setState(() {});
+            },
+          ),
+
+          // 2. Weekly Recap
+          SwitchListTile(
+            title: const Text('AI Weekly Recap Notification', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Row(
+              children: [
+                Text('${_weekdayName(repo.weeklyRecapWeekday)} at ${repo.weeklyRecapTime.format(context)}'),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => _pickWeeklyRecapSchedule(context, repo),
+                  child: const Text('(Change)', style: TextStyle(color: Colors.blue, fontSize: 12)),
+                ),
+              ],
+            ),
+            value: repo.weeklyRecapEnabled,
+            onChanged: (val) async {
+              await repo.setWeeklyRecapEnabled(val);
+              await ref.read(recapSchedulerServiceProvider).syncRecapAlarms();
+              setState(() {});
+            },
+          ),
+
+          // 3. Monthly Recap
+          SwitchListTile(
+            title: const Text('AI Monthly Recap Notification', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Row(
+              children: [
+                Text('Last day of month at ${repo.monthlyRecapTime.format(context)}'),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    final t = await showTimePicker(context: context, initialTime: repo.monthlyRecapTime);
+                    if (t != null) {
+                      await repo.setMonthlyRecapTime(t);
+                      await ref.read(recapSchedulerServiceProvider).syncRecapAlarms();
+                      setState(() {});
+                    }
+                  },
+                  child: const Text('(Change)', style: TextStyle(color: Colors.blue, fontSize: 12)),
+                ),
+              ],
+            ),
+            value: repo.monthlyRecapEnabled,
+            onChanged: (val) async {
+              await repo.setMonthlyRecapEnabled(val);
+              await ref.read(recapSchedulerServiceProvider).syncRecapAlarms();
+              setState(() {});
+            },
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final scheduler = ref.read(recapSchedulerServiceProvider);
+                await scheduler.triggerTestRecapNotification(type: RecapType.daily);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Test Spoken Daily Recap alert scheduled in 3 seconds! (Lock screen to test background speech)'),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.record_voice_over_outlined, size: 18),
+              label: const Text('Test Spoken Daily Recap Alert'),
+            ),
+          ),
+
+          const Divider(),
           _buildSectionHeader(context, 'ADVANCED'),
 
           SwitchListTile(
@@ -339,6 +600,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                                 ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
                                   voiceGender: 'male',
                                   speed: repo.speakingSpeed,
+                                  volume: repo.speakingVolume,
                                 );
                               }
                               if (mounted) setState(() {});
@@ -371,6 +633,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                                 ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
                                   voiceGender: 'female',
                                   speed: repo.speakingSpeed,
+                                  volume: repo.speakingVolume,
                                 );
                               }
                               if (mounted) setState(() {});
@@ -439,6 +702,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                               ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
                                 voiceGender: repo.voiceGender,
                                 speed: spd,
+                                volume: repo.speakingVolume,
                               );
                             }
                             setState(() {});
@@ -462,6 +726,98 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                               ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
                                 voiceGender: repo.voiceGender,
                                 speed: spd,
+                                volume: repo.speakingVolume,
+                              );
+                            }
+                            setState(() {});
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.volume_up_rounded, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Speaking Notification Volume',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${(repo.speakingVolume * 100).round()}%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.volume_down_rounded, size: 20, color: Colors.grey),
+                      Expanded(
+                        child: Slider(
+                          value: repo.speakingVolume.clamp(0.0, 1.0),
+                          min: 0.0,
+                          max: 1.0,
+                          divisions: 20,
+                          label: '${(repo.speakingVolume * 100).round()}%',
+                          onChanged: (val) {
+                            final vol = (val * 100).round() / 100.0;
+                            repo.setSpeakingVolume(vol);
+                            ref.read(voiceAnnouncementServiceProvider).setVolume(vol);
+                            if (!kIsWeb) {
+                              ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
+                                voiceGender: repo.voiceGender,
+                                speed: repo.speakingSpeed,
+                                volume: vol,
+                              );
+                            }
+                            setState(() {});
+                          },
+                        ),
+                      ),
+                      const Icon(Icons.volume_up_rounded, size: 20, color: Colors.grey),
+                    ],
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    children: [0.2, 0.5, 0.7, 0.85, 1.0].map((vol) {
+                      final isSelected = ((repo.speakingVolume - vol).abs() < 0.03);
+                      return ChoiceChip(
+                        label: Text('${(vol * 100).round()}%'),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          if (selected) {
+                            repo.setSpeakingVolume(vol);
+                            ref.read(voiceAnnouncementServiceProvider).setVolume(vol);
+                            if (!kIsWeb) {
+                              ref.read(alarmSchedulerServiceProvider).updateVoiceSettings(
+                                voiceGender: repo.voiceGender,
+                                speed: repo.speakingSpeed,
+                                volume: vol,
                               );
                             }
                             setState(() {});
@@ -522,15 +878,17 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                       try {
                         final voiceService = ref.read(voiceAnnouncementServiceProvider);
                         await voiceService.stop();
-                        await voiceService.speakSampleAnnouncement();
+                        await voiceService.setVolume(repo.speakingVolume);
+                        await voiceService.speakSampleAnnouncement(volume: repo.speakingVolume);
                       } catch (_) {
                         final engine = ref.read(notificationEngineProvider);
                         await engine.speak(phrase);
                       }
                       if (context.mounted) {
                         final voiceName = repo.voiceGender == 'male' ? 'Male Voice' : 'Female Voice';
+                        final volumePercent = (repo.speakingVolume * 100).round();
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Speaking ($voiceName): "$phrase"')),
+                          SnackBar(content: Text('Speaking ($voiceName, $volumePercent% volume): "$phrase"')),
                         );
                       }
                     },
@@ -561,5 +919,76 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
         ),
       ),
     );
+  }
+
+  String _weekdayName(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Every Monday';
+      case DateTime.tuesday:
+        return 'Every Tuesday';
+      case DateTime.wednesday:
+        return 'Every Wednesday';
+      case DateTime.thursday:
+        return 'Every Thursday';
+      case DateTime.friday:
+        return 'Every Friday';
+      case DateTime.saturday:
+        return 'Every Saturday';
+      case DateTime.sunday:
+      default:
+        return 'Every Sunday';
+    }
+  }
+
+  Future<void> _pickWeeklyRecapSchedule(
+      BuildContext context, NotificationSettingsRepository repo) async {
+    final weekdays = [
+      {'day': DateTime.monday, 'name': 'Monday'},
+      {'day': DateTime.tuesday, 'name': 'Tuesday'},
+      {'day': DateTime.wednesday, 'name': 'Wednesday'},
+      {'day': DateTime.thursday, 'name': 'Thursday'},
+      {'day': DateTime.friday, 'name': 'Friday'},
+      {'day': DateTime.saturday, 'name': 'Saturday'},
+      {'day': DateTime.sunday, 'name': 'Sunday'},
+    ];
+
+    int selectedDay = repo.weeklyRecapWeekday;
+
+    final pickedDay = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Weekly Recap Day'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: weekdays.map((item) {
+            final day = item['day'] as int;
+            final name = item['name'] as String;
+            return RadioListTile<int>(
+              title: Text(name),
+              value: day,
+              groupValue: selectedDay,
+              onChanged: (v) {
+                if (v != null) Navigator.pop(ctx, v);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+
+    if (pickedDay != null && context.mounted) {
+      await repo.setWeeklyRecapWeekday(pickedDay);
+      if (!context.mounted) return;
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: repo.weeklyRecapTime,
+      );
+      if (pickedTime != null) {
+        await repo.setWeeklyRecapTime(pickedTime);
+      }
+      await ref.read(recapSchedulerServiceProvider).syncRecapAlarms();
+      setState(() {});
+    }
   }
 }

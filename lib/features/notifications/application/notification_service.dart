@@ -14,7 +14,7 @@ void notificationTapBackground(NotificationResponse response) {
   // Background isolate notification action handler — safe, no UI calls
 }
 
-typedef NotificationResponseCallback = void Function(String? payload);
+typedef NotificationResponseCallback = void Function(String? payload, {String? actionId});
 
 class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
@@ -38,9 +38,7 @@ class NotificationService {
       await _plugin.initialize(
         settings: initializationSettings,
         onDidReceiveNotificationResponse: (response) {
-          if (response.payload != null) {
-            onNotificationResponse?.call(response.payload);
-          }
+          onNotificationResponse?.call(response.payload, actionId: response.actionId);
         },
         onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
       );
@@ -86,12 +84,35 @@ class NotificationService {
       enableVibration: false,
     );
 
+    // Channel for Clock Alarms
+    const alarmChannel = AndroidNotificationChannel(
+      'timora_alarm',
+      'Timora Alarm',
+      description: 'Alarm notifications and wake-up alerts',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+    );
+
+    // Channel for Countdown Timer
+    const timerChannel = AndroidNotificationChannel(
+      'timora_timer',
+      'Timora Timer',
+      description: 'Countdown timer completion alerts',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
     final androidImplementation = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
 
     await androidImplementation?.createNotificationChannel(routineChannel);
     await androidImplementation?.createNotificationChannel(dailyChannel);
     await androidImplementation?.createNotificationChannel(voiceChannel);
+    await androidImplementation?.createNotificationChannel(alarmChannel);
+    await androidImplementation?.createNotificationChannel(timerChannel);
   }
 
   Future<bool> requestPermission() async {
@@ -134,8 +155,28 @@ class NotificationService {
     String channelDescription;
     Importance importance;
     Priority priority;
+    List<AndroidNotificationAction>? actions;
 
     switch (channelId) {
+      case 'timora_alarm':
+        channelName = 'Timora Alarm';
+        channelDescription = 'Alarm notifications and wake-up alerts';
+        importance = Importance.max;
+        priority = Priority.max;
+        actions = const [
+          AndroidNotificationAction('dismiss_alarm', 'Dismiss', showsUserInterface: true),
+          AndroidNotificationAction('snooze_alarm', 'Snooze', showsUserInterface: true),
+        ];
+        break;
+      case 'timora_timer':
+        channelName = 'Timora Timer';
+        channelDescription = 'Countdown timer completion alerts';
+        importance = Importance.high;
+        priority = Priority.high;
+        actions = const [
+          AndroidNotificationAction('dismiss_timer', 'Dismiss', showsUserInterface: true),
+        ];
+        break;
       case 'timora_routine':
         channelName = 'Timora Routine';
         channelDescription = 'Notifications for activity start and end times';
@@ -166,6 +207,15 @@ class NotificationService {
         priority: priority,
         playSound: playSound,
         enableVibration: enableVibration,
+        actions: actions,
+        audioAttributesUsage: channelId == 'timora_alarm'
+            ? AudioAttributesUsage.alarm
+            : AudioAttributesUsage.notification,
+        category: channelId == 'timora_alarm'
+            ? AndroidNotificationCategory.alarm
+            : (channelId == 'timora_timer'
+                ? AndroidNotificationCategory.stopwatch
+                : AndroidNotificationCategory.reminder),
       ),
     );
   }

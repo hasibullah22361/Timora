@@ -13,7 +13,9 @@ import '../../../schedule/data/repositories/schedule_repository.dart';
 import '../../../tasks/data/repositories/task_repository.dart';
 import '../../../widget/services/widget_update_service.dart';
 import '../../../cloud_sync/services/sync_service.dart';
-
+import '../../../recap/application/recap_scheduler_service.dart';
+import '../../../notifications/application/notification_controller.dart';
+import '../../../../core/services/remote_config_service.dart';
 
 class MainLayoutScreen extends ConsumerStatefulWidget {
   const MainLayoutScreen({super.key});
@@ -22,7 +24,8 @@ class MainLayoutScreen extends ConsumerStatefulWidget {
   ConsumerState<MainLayoutScreen> createState() => _MainLayoutScreenState();
 }
 
-class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with WidgetsBindingObserver {
+class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen>
+    with WidgetsBindingObserver {
   DateTime? _lastBackPressTime;
 
   final List<Widget> _screens = [
@@ -45,6 +48,33 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
       // Initialize NotificationEngine (Web scheduler or native Android notification channels)
       final engine = ref.read(notificationEngineProvider);
       engine.initialize();
+
+      // Synchronize AI Recap alarms (Daily, Weekly, Monthly) to Android scheduler
+      try {
+        ref.read(recapSchedulerServiceProvider).syncRecapAlarms();
+      } catch (e) {
+        debugPrint('[MainLayout] Failed to sync recap alarms: $e');
+      }
+
+      // Ensure notificationController is initialized to handle notification responses
+      final notifController = ref.read(notificationControllerProvider);
+
+      // Check if there was a pending notification on app launch from cold state
+      if (!kIsWeb) {
+        const channel = MethodChannel('timora/alarm');
+        channel.invokeMethod<String>('getInitialNotification').then((payload) {
+          if (payload != null && payload.isNotEmpty) {
+            notifController.handleNotificationResponse(payload);
+          }
+        }).catchError((_) {});
+
+        channel.setMethodCallHandler((call) async {
+          if (call.method == 'onNotificationTapped') {
+            final payload = call.arguments as String?;
+            notifController.handleNotificationResponse(payload);
+          }
+        });
+      }
 
       // On Web, start in-app schedule monitoring loop via NotificationEngine
       if (kIsWeb) {
@@ -104,14 +134,16 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
 
     // If on Home (Tab 0), require double back-press to exit
     final now = DateTime.now();
-    if (_lastBackPressTime == null || now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
       _lastBackPressTime = now;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Press back again to exit Timora'),
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     } else {
@@ -142,9 +174,11 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                   extended: isExpanded,
                   minExtendedWidth: 200,
                   backgroundColor: theme.colorScheme.surface,
-                  indicatorColor: theme.colorScheme.primary.withValues(alpha: 0.14),
+                  indicatorColor:
+                      theme.colorScheme.primary.withValues(alpha: 0.14),
                   leading: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 24, horizontal: 16),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -155,7 +189,8 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                             borderRadius: BorderRadius.circular(10),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                                color: const Color(0xFF2563EB)
+                                    .withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -231,22 +266,48 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
         }
 
         final isDark = theme.brightness == Brightness.dark;
+        final remoteConfig = ref.watch(remoteConfigProvider);
 
         return PopScope(
           canPop: false,
           onPopInvokedWithResult: (didPop, result) => _handlePopInvoked(didPop),
           child: Scaffold(
             backgroundColor: theme.scaffoldBackgroundColor,
-            body: IndexedStack(
-              index: currentIndex,
-              children: _screens,
+            body: Column(
+              children: [
+                if (remoteConfig.maintenanceMode)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+                    color: const Color(0xFFF59E0B),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Colors.black, size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          'Maintenance Mode: Cloud sync is temporarily paused by administrator.',
+                          style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: IndexedStack(
+                    index: currentIndex,
+                    children: _screens,
+                  ),
+                ),
+              ],
             ),
             bottomNavigationBar: Container(
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF070B14) : Colors.white,
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? const Color(0xFF131B2C) : const Color(0xFFE2E8F0),
+                    color: isDark
+                        ? const Color(0xFF131B2C)
+                        : const Color(0xFFE2E8F0),
                     width: 1,
                   ),
                 ),
@@ -256,7 +317,8 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                 onDestinationSelected: (index) {
                   ref.read(navigationIndexProvider.notifier).state = index;
                 },
-                backgroundColor: isDark ? const Color(0xFF070B14) : Colors.white,
+                backgroundColor:
+                    isDark ? const Color(0xFF070B14) : Colors.white,
                 elevation: 0,
                 height: 65,
                 destinations: const [
